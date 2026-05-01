@@ -22,6 +22,14 @@ class BoardObservation:
     annotated_image: Optional[np.ndarray] = None
 
     def to_yaml_payload(self) -> dict:
+        """将标定板观测结果转换为 YAML 可序列化字典
+
+        Args:
+            None: 无输入参数
+
+        Returns:
+            dict: 函数执行结果
+        """
         return {
             "board_type": self.board_type,
             "ok": bool(self.ok),
@@ -29,7 +37,11 @@ class BoardObservation:
             "corners_count": int(self.corners_count),
             "reprojection_error_px": self.reprojection_error_px,
             "image_size": list(self.image_size) if self.image_size else None,
-            "T_camera_board": {"matrix": self.T_camera_board.tolist()} if self.T_camera_board is not None else None,
+            "T_camera_board": (
+                {"matrix": self.T_camera_board.tolist()}
+                if self.T_camera_board is not None
+                else None
+            ),
             "rvec": self.rvec.reshape(-1).tolist() if self.rvec is not None else None,
             "tvec_m": self.tvec.reshape(-1).tolist() if self.tvec is not None else None,
         }

@@ -17,6 +17,14 @@ from hand_eye_calibrator.solvers import create_solver
 
 
 def _task_from_payload(payload: dict) -> CalibrationTask:
+    """从配置字典构造标定任务对象
+
+    Args:
+        payload (dict): 参数 payload
+
+    Returns:
+        CalibrationTask: 函数执行结果
+    """
     return CalibrationTask(
         name=payload["name"],
         type=payload["type"],
@@ -29,6 +37,14 @@ def _task_from_payload(payload: dict) -> CalibrationTask:
 
 
 def main() -> None:
+    """命令行入口，解析参数并执行对应流程
+
+    Args:
+        None: 无输入参数
+
+    Returns:
+        None: 无返回值
+    """
     parser = argparse.ArgumentParser(
         description="Run one multi-function hand-eye calibration task."
     )

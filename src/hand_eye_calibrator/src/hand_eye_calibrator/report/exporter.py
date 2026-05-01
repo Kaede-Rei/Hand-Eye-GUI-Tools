@@ -5,13 +5,24 @@ from pathlib import Path
 from typing import Iterable, TYPE_CHECKING
 
 from hand_eye_calibrator.core.io import ensure_dir, write_data
-from hand_eye_calibrator.core.transform import matrix_to_quaternion_xyzw, transform_from_dict
+from hand_eye_calibrator.core.transform import (
+    matrix_to_quaternion_xyzw,
+    transform_from_dict,
+)
 
 if TYPE_CHECKING:
     from hand_eye_calibrator.solvers.base import CalibrationResult
 
 
 def _static_tf_node(result: CalibrationResult) -> str:
+    """根据标定结果生成 static_transform_publisher launch 节点
+
+    Args:
+        result (CalibrationResult): 参数 result
+
+    Returns:
+        str: 函数执行结果
+    """
     T = result.T_parent_child
     x, y, z = [float(v) for v in T[:3, 3]]
     qx, qy, qz, qw = matrix_to_quaternion_xyzw(T[:3, :3])
@@ -21,6 +32,15 @@ def _static_tf_node(result: CalibrationResult) -> str:
 
 
 def export_result(output_root: Path, result: CalibrationResult) -> Path:
+    """导出单个标定结果 YAML 和 Markdown 报告
+
+    Args:
+        output_root (Path): 参数 output_root
+        result (CalibrationResult): 参数 result
+
+    Returns:
+        Path: 函数执行结果
+    """
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out = ensure_dir(output_root / f"{result.task_name}_{stamp}")
     write_data(out / f"{result.task_name}.yaml", result.to_payload())
@@ -30,6 +50,14 @@ def export_result(output_root: Path, result: CalibrationResult) -> Path:
 
 
 def load_result(path: Path) -> CalibrationResult:
+    """从已有结果 YAML 文件恢复标定结果对象
+
+    Args:
+        path (Path): 参数 path
+
+    Returns:
+        CalibrationResult: 函数执行结果
+    """
     from hand_eye_calibrator.core.io import read_data
     from hand_eye_calibrator.solvers.base import CalibrationResult
 
@@ -49,6 +77,16 @@ def load_result(path: Path) -> CalibrationResult:
 def export_tf_bundle(
     output_root: Path, project_name: str, results: Iterable[CalibrationResult]
 ) -> Path:
+    """将多个标定结果导出为统一 static TF bundle
+
+    Args:
+        output_root (Path): 参数 output_root
+        project_name (str): 参数 project_name
+        results (Iterable[CalibrationResult]): 参数 results
+
+    Returns:
+        Path: 函数执行结果
+    """
     results = list(results)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out = ensure_dir(output_root / f"{project_name}_tf_{stamp}")
@@ -71,6 +109,14 @@ def export_tf_bundle(
 
 
 def _report_markdown(results) -> str:
+    """生成标定结果 Markdown 报告文本
+
+    Args:
+        results (Any): 参数 results
+
+    Returns:
+        str: 函数执行结果
+    """
     lines = ["# Hand-Eye Calibration Report", ""]
     for r in results:
         t = r.T_parent_child[:3, 3]

@@ -10,18 +10,44 @@ from hand_eye_calibrator.core.transform import make_transform
 
 class ChessboardDetector:
     def __init__(self, config: dict):
+        """初始化对象并保存运行所需的状态
+
+        Args:
+            config (dict): 参数 config
+
+        Returns:
+            None: 无返回值
+        """
         self.config = dict(config)
         self.cols = int(config.get("cols", config.get("columns", 9)))
         self.rows = int(config.get("rows", 6))
         self.square_size_m = float(config.get("square_size_m", 0.025))
 
     def object_points(self) -> np.ndarray:
+        """生成棋盘格内角点对应的三维物点坐标
+
+        Args:
+            None: 无输入参数
+
+        Returns:
+            np.ndarray: 函数执行结果
+        """
         obj = np.zeros((self.cols * self.rows, 3), dtype=np.float64)
         obj[:, :2] = np.mgrid[0 : self.cols, 0 : self.rows].T.reshape(-1, 2)
         obj *= self.square_size_m
         return obj
 
     def detect(self, image_bgr, camera_matrix, dist_coeffs) -> BoardObservation:
+        """在图像中检测标定板并估计相机到标定板的位姿
+
+        Args:
+            image_bgr (Any): 参数 image_bgr
+            camera_matrix (Any): 参数 camera_matrix
+            dist_coeffs (Any): 参数 dist_coeffs
+
+        Returns:
+            BoardObservation: 函数执行结果
+        """
         if image_bgr is None:
             return BoardObservation(False, "chessboard", "empty image")
         gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)

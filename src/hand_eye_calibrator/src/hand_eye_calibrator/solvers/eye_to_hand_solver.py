@@ -16,12 +16,30 @@ from hand_eye_calibrator.solvers.base import CalibrationResult
 
 class EyeToHandKnownBoardSolver:
     def __init__(self, T_tool_board=None, iterations: int = 25):
+        """初始化对象并保存运行所需的状态
+
+        Args:
+            T_tool_board (Any): 参数 T_tool_board
+            iterations (int): 参数 iterations
+
+        Returns:
+            None: 无返回值
+        """
         self.T_tool_board = T_tool_board
         self.iterations = int(iterations)
 
     def solve(
         self, task: CalibrationTask, records: Sequence[SampleRecord]
     ) -> CalibrationResult:
+        """执行标定任务求解并返回标定结果
+
+        Args:
+            task (CalibrationTask): 参数 task
+            records (Sequence[SampleRecord]): 参数 records
+
+        Returns:
+            CalibrationResult: 函数执行结果
+        """
         if not task.camera:
             raise ValueError("eye_to_hand task requires camera")
         valid = [
@@ -78,6 +96,15 @@ class EyeToHandKnownBoardSolver:
         )
 
     def _solve_unknown_board(self, task: CalibrationTask, valid) -> CalibrationResult:
+        """在未知 T_tool_board 时交替估计外部相机和工具板位姿
+
+        Args:
+            task (CalibrationTask): 参数 task
+            valid (Any): 参数 valid
+
+        Returns:
+            CalibrationResult: 函数执行结果
+        """
         T_tool_board = np.eye(4, dtype=np.float64)
         T_base_camera = np.eye(4, dtype=np.float64)
         for _ in range(max(1, self.iterations)):

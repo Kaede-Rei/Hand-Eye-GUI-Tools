@@ -18,6 +18,15 @@ class CameraToCameraSolver:
     def solve(
         self, task: CalibrationTask, records: Sequence[SampleRecord]
     ) -> CalibrationResult:
+        """执行标定任务求解并返回标定结果
+
+        Args:
+            task (CalibrationTask): 参数 task
+            records (Sequence[SampleRecord]): 参数 records
+
+        Returns:
+            CalibrationResult: 函数执行结果
+        """
         if not task.reference_camera or not task.target_camera:
             raise ValueError(
                 "camera_to_camera task requires reference_camera and target_camera"
@@ -45,10 +54,7 @@ class CameraToCameraSolver:
         metrics = transform_residual_metrics(T_ref_target, estimates)
         metrics.update(
             scalar_error_stats(
-                [
-                    r.cameras[task.reference_camera].reprojection_error_px
-                    for r in valid
-                ],
+                [r.cameras[task.reference_camera].reprojection_error_px for r in valid],
                 "reference_reprojection_error_px",
             )
         )

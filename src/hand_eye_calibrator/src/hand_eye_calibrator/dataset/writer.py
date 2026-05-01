@@ -12,6 +12,14 @@ from hand_eye_calibrator.core.transform import transform_to_dict
 
 
 def next_sample_id(dataset_root: Path) -> int:
+    """计算数据集中下一个可用样本编号
+
+    Args:
+        dataset_root (Path): 参数 dataset_root
+
+    Returns:
+        int: 函数执行结果
+    """
     samples_root = dataset_root / "samples"
     if not samples_root.exists():
         return 1
@@ -31,6 +39,21 @@ def write_sample(
     used_for=None,
     sync_payload: Optional[dict] = None,
 ) -> Path:
+    """将一次采样的图像、内参、检测结果和机器人位姿写入数据集
+
+    Args:
+        dataset_root (Path): 参数 dataset_root
+        sample_id (int): 参数 sample_id
+        camera_payloads (Dict[str, dict]): 参数 camera_payloads
+        T_base_tool (Any): 参数 T_base_tool
+        robot_parent_frame (str): 参数 robot_parent_frame
+        robot_child_frame (str): 参数 robot_child_frame
+        used_for (Any): 参数 used_for
+        sync_payload (Optional[dict]): 参数 sync_payload
+
+    Returns:
+        Path: 函数执行结果
+    """
     sample_dir = ensure_dir(dataset_root / "samples" / f"{sample_id:06d}")
     now = datetime.now().isoformat(timespec="milliseconds")
     write_data(

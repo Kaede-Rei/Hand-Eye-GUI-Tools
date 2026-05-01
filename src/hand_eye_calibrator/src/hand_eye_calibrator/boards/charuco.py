@@ -20,6 +20,14 @@ _DICT_NAMES = (
 
 class CharucoDetector:
     def __init__(self, config: dict):
+        """初始化对象并保存运行所需的状态
+
+        Args:
+            config (dict): 参数 config
+
+        Returns:
+            None: 无返回值
+        """
         if not hasattr(cv2, "aruco"):
             raise RuntimeError(
                 "OpenCV aruco module is unavailable; install opencv-contrib-python or ROS cv2 with aruco"
@@ -43,6 +51,16 @@ class CharucoDetector:
         )
 
     def detect(self, image_bgr, camera_matrix, dist_coeffs) -> BoardObservation:
+        """在图像中检测标定板并估计相机到标定板的位姿
+
+        Args:
+            image_bgr (Any): 参数 image_bgr
+            camera_matrix (Any): 参数 camera_matrix
+            dist_coeffs (Any): 参数 dist_coeffs
+
+        Returns:
+            BoardObservation: 函数执行结果
+        """
         if image_bgr is None:
             return BoardObservation(False, "charuco", "empty image")
         gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)

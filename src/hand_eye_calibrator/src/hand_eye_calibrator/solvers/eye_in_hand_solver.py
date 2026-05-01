@@ -25,11 +25,28 @@ _METHODS = {
 
 class EyeInHandSolver:
     def __init__(self, method: str = "TSAI"):
+        """初始化对象并保存运行所需的状态
+
+        Args:
+            method (str): 参数 method
+
+        Returns:
+            None: 无返回值
+        """
         self.method = method.upper()
 
     def solve(
         self, task: CalibrationTask, records: Sequence[SampleRecord]
     ) -> CalibrationResult:
+        """执行标定任务求解并返回标定结果
+
+        Args:
+            task (CalibrationTask): 参数 task
+            records (Sequence[SampleRecord]): 参数 records
+
+        Returns:
+            CalibrationResult: 函数执行结果
+        """
         if not task.camera:
             raise ValueError("eye_in_hand task requires camera")
         valid = [

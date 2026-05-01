@@ -19,6 +19,14 @@ class CalibrationResult:
     output_dir: Optional[str] = None
 
     def to_payload(self) -> dict:
+        """将标定结果转换为 YAML 可序列化字典
+
+        Args:
+            None: 无输入参数
+
+        Returns:
+            dict: 函数执行结果
+        """
         from hand_eye_calibrator.core.transform import transform_to_dict
 
         return {

@@ -88,8 +88,8 @@ ApplicationWindow {
     }
 
     /*
-     * 启动阶段先让窗口和加载遮罩完成首帧绘制，再读取配置。
-     * 这样 ROS / Python 环境较慢时不会出现长时间空白窗口。
+     * 启动阶段先让窗口和加载遮罩完成首帧绘制，再读取配置
+     * 这样 ROS / Python 环境较慢时不会出现长时间空白窗口
      */
 
     Connections {
@@ -187,17 +187,21 @@ ApplicationWindow {
         logs += "[" + now.toLocaleTimeString() + "] " + message + "\n"
         logArea.text = logs
         logArea.cursorPosition = logArea.length
+        Qt.callLater(function() {
+            var flickable = logScroll.contentItem
+            flickable.contentY = Math.max(0, flickable.contentHeight - flickable.height)
+        })
     }
 
     function activeTaskHint() {
         for (var i = 0; i < tasks.length; ++i) {
             if (tasks[i].name === activeTask) {
                 if (tasks[i].type === "camera_to_camera")
-                    return "需要 " + tasks[i].reference_camera + " 与 " + tasks[i].target_camera + " 同时看到同一块标定板。"
-                return "需要 " + tasks[i].camera + " 图像、camera_info、" + baseFrame.text + " -> " + toolFrame.text + " TF。TF 起点和终点可配置为任意 link。"
+                    return "需要 " + tasks[i].reference_camera + " 与 " + tasks[i].target_camera + " 同时看到同一块标定板"
+                return "需要 " + tasks[i].camera + " 图像、camera_info、" + baseFrame.text + " -> " + toolFrame.text + " TF；TF 起点和终点可配置为任意 link"
             }
         }
-        return "请选择任务。"
+        return "请选择任务"
     }
 
     function toggleMaximize() {
@@ -476,7 +480,7 @@ ApplicationWindow {
         width: parent ? parent.width : 220
         height: 38
         radius: 9
-        color: selected ? root.macBlue : navMouse.pressed ? "#CBE4FF" : navMouse.containsMouse ? "#E2F1FF" : "transparent"
+        color: selected ? root.macBlue : navMouse.pressed ? "#CBE4FF" : navMouse.containsMouse ? "#E2F1FF" : "#00E2F1FF"
         scale: navMouse.pressed && !selected ? 0.985 : 1
         Behavior on color { ColorAnimation { duration: 160; easing.type: Easing.OutCubic } }
         Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
@@ -545,8 +549,8 @@ ApplicationWindow {
 
         SequentialAnimation {
             id: edgePulse
-            NumberAnimation { target: scroller; property: "edgeOffset"; to: scroller.edgeDirection * 7; duration: 70; easing.type: Easing.OutCubic }
-            NumberAnimation { target: scroller; property: "edgeOffset"; to: 0; duration: 210; easing.type: Easing.OutElastic }
+            NumberAnimation { target: scroller; property: "edgeOffset"; to: scroller.edgeDirection * 22; duration: 95; easing.type: Easing.OutCubic }
+            NumberAnimation { target: scroller; property: "edgeOffset"; to: 0; duration: 300; easing.type: Easing.OutElastic }
         }
     }
 
@@ -817,7 +821,7 @@ ApplicationWindow {
 
                     handle: Rectangle {
                         implicitHeight: 10
-                        color: SplitHandle.hovered || SplitHandle.pressed ? "#E2F1FF" : "transparent"
+                        color: SplitHandle.hovered || SplitHandle.pressed ? "#E2F1FF" : "#00E2F1FF"
                         Rectangle {
                             anchors.centerIn: parent
                             width: 64
@@ -837,7 +841,7 @@ ApplicationWindow {
 
                         handle: Rectangle {
                             implicitWidth: 10
-                            color: SplitHandle.hovered || SplitHandle.pressed ? root.macBlueSoft : "transparent"
+                            color: SplitHandle.hovered || SplitHandle.pressed ? root.macBlueSoft : "#00EAF4FF"
                             Rectangle {
                                 anchors.centerIn: parent
                                 width: 3
@@ -960,7 +964,7 @@ ApplicationWindow {
                                 ColumnLayout {
                                     width: parent.width
                                     spacing: 16
-                                    SectionNote { text: "项目页用于管理本次标定的配置文件、数据集目录和结果输出目录。建议每次正式标定使用独立 dataset_root。" }
+                                    SectionNote { text: "项目页用于管理本次标定的配置文件、数据集目录和结果输出目录；建议每次正式标定使用独立 dataset_root" }
                                     GridLayout {
                                         columns: 2
                                         rowSpacing: 12
@@ -988,7 +992,7 @@ ApplicationWindow {
                                 ColumnLayout {
                                     width: parent.width
                                     spacing: 14
-                                    SectionNote { text: "相机页配置多路 ROS 图像话题。采样时按任务自动保存需要的相机帧，frame_id 应填写对应 optical frame。" }
+                                    SectionNote { text: "相机页配置多路 ROS 图像话题；采样时按任务自动保存需要的相机帧，frame_id 应填写对应 optical frame" }
                                     Repeater {
                                         id: cameraRepeater
                                         model: root.cameraNames
@@ -1009,7 +1013,7 @@ ApplicationWindow {
                                 ColumnLayout {
                                     width: parent.width
                                     spacing: 16
-                                    SectionNote { text: "标定板页设置检测参数。每个相机的备用内参在相机页独立配置；连接 ROS 后检测会优先使用各自 camera_info。" }
+                                    SectionNote { text: "标定板页设置检测参数；每个相机的备用内参在相机页独立配置；连接 ROS 后检测会优先使用各自 camera_info" }
                                     GridLayout {
                                         columns: 2
                                         rowSpacing: 12
@@ -1040,7 +1044,7 @@ ApplicationWindow {
                                 ColumnLayout {
                                     width: parent.width
                                     spacing: 16
-                                    SectionNote { text: "eye-in-hand 和 eye-to-hand 采样需要查询 base_frame -> tool_frame；camera-to-camera 不需要机械臂 TF。" }
+                                    SectionNote { text: "eye-in-hand 和 eye-to-hand 采样需要查询 base_frame -> tool_frame；camera-to-camera 不需要机械臂 TF" }
                                     GridLayout {
                                         columns: 2
                                         rowSpacing: 12
@@ -1074,7 +1078,7 @@ ApplicationWindow {
                                 ColumnLayout {
                                     width: parent.width
                                     spacing: 16
-                                    SectionNote { text: "任务页决定一次采样和一次标定使用哪些输入。建议按 eye-in-hand、eye-to-hand、camera-to-camera 顺序完成。" }
+                                    SectionNote { text: "任务页决定一次采样和一次标定使用哪些输入；建议按 eye-in-hand、eye-to-hand、camera-to-camera 顺序完成" }
                                     FieldLabel { text: "当前任务" }
                                     MacComboBox {
                                         id: taskBox
@@ -1091,7 +1095,7 @@ ApplicationWindow {
                                 ColumnLayout {
                                     width: parent.width
                                     spacing: 16
-                                    SectionNote { text: "采样会保存原图、camera_info、检测结果和 annotated.png。若当前任务需要机器人位姿，会同时保存 robot_pose.yaml。" }
+                                    SectionNote { text: "采样会保存原图、camera_info、检测结果和 annotated.png；若当前任务需要机器人位姿，会同时保存 robot_pose.yaml" }
                                     GridLayout {
                                         columns: 2
                                         rowSpacing: 12
@@ -1112,7 +1116,7 @@ ApplicationWindow {
                                 ColumnLayout {
                                     width: parent.width
                                     spacing: 16
-                                    SectionNote { text: "样本编号 0 表示不限制。eye-to-hand 已知板模式需要填写 T_tool_board：x,y,z,qx,qy,qz,qw。" }
+                                    SectionNote { text: "样本编号 0 表示不限制；eye-to-hand 已知板模式需要填写 T_tool_board：x,y,z,qx,qy,qz,qw" }
                                     GridLayout {
                                         columns: 2
                                         rowSpacing: 12
@@ -1162,16 +1166,26 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 130
                         color: "#F5F5F7"
-                        TextArea {
-                            id: logArea
+                        ScrollView {
+                            id: logScroll
                             anchors.fill: parent
                             anchors.margins: 10
-                            readOnly: true
-                            wrapMode: TextArea.Wrap
-                            color: "#1D1D1F"
-                            font.family: "JetBrains Mono"
-                            font.pixelSize: 12
-                            background: Rectangle { color: "transparent" }
+                            clip: true
+                            ScrollBar.vertical.policy: ScrollBar.AsNeeded
+                            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+                            TextArea {
+                                id: logArea
+                                width: logScroll.availableWidth
+                                height: Math.max(108, contentHeight + 8)
+                                readOnly: true
+                                selectByMouse: true
+                                wrapMode: TextArea.Wrap
+                                color: "#1D1D1F"
+                                font.family: "JetBrains Mono"
+                                font.pixelSize: 12
+                                background: Rectangle { color: "transparent" }
+                            }
                         }
                     }
                 }

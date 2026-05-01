@@ -17,7 +17,11 @@ from hand_eye_calibrator.core.io import read_data, write_data
 from hand_eye_calibrator.core.transform import make_transform, quaternion_xyzw_to_matrix
 from hand_eye_calibrator.dataset.loader import load_dataset_records
 from hand_eye_calibrator.dataset.schema import CalibrationTask
-from hand_eye_calibrator.report.exporter import export_result, export_tf_bundle, load_result
+from hand_eye_calibrator.report.exporter import (
+    export_result,
+    export_tf_bundle,
+    load_result,
+)
 from hand_eye_calibrator.ros.tf_reader import TfReader
 from hand_eye_calibrator.ros.topic_reader import RosTopicReader
 
@@ -27,18 +31,44 @@ QML_MAIN = Path(__file__).resolve().parent / "qml" / "Main.qml"
 
 class TerminalSpinner:
     def __init__(self, message: str):
+        """初始化对象并保存运行所需的状态
+
+        Args:
+            message (str): 参数 message
+
+        Returns:
+            None: 无返回值
+        """
         self.message = message
         self.enabled = sys.stderr.isatty()
         self.done = threading.Event()
         self.thread: threading.Thread | None = None
 
     def __enter__(self):
+        """进入上下文管理器并启动相关资源
+
+        Args:
+            None: 无输入参数
+
+        Returns:
+            None: 当前上下文管理器实例
+        """
         if self.enabled:
             self.thread = threading.Thread(target=self._run, daemon=True)
             self.thread.start()
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        """退出上下文管理器并释放相关资源
+
+        Args:
+            exc_type (Any): 参数 exc_type
+            exc (Any): 参数 exc
+            tb (Any): 参数 tb
+
+        Returns:
+            None: 不抑制上下文异常
+        """
         if not self.enabled:
             return
         self.done.set()
@@ -48,6 +78,14 @@ class TerminalSpinner:
         sys.stderr.flush()
 
     def _run(self) -> None:
+        """在后台循环执行轻量状态更新
+
+        Args:
+            None: 无输入参数
+
+        Returns:
+            None: 无返回值
+        """
         frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         i = 0
         while not self.done.is_set():
@@ -58,19 +96,51 @@ class TerminalSpinner:
 
 
 def _json(payload) -> str:
+    """将 Python 对象序列化为保留中文的 JSON 字符串
+
+    Args:
+        payload (Any): 参数 payload
+
+    Returns:
+        str: 函数执行结果
+    """
     return json.dumps(payload, ensure_ascii=False)
 
 
 def _loads(raw: str) -> dict:
+    """将 JSON 字符串解析为字典对象
+
+    Args:
+        raw (str): 参数 raw
+
+    Returns:
+        dict: 函数执行结果
+    """
     return json.loads(raw) if raw else {}
 
 
 class CameraImageProvider(QQuickImageProvider):
     def __init__(self):
+        """初始化对象并保存运行所需的状态
+
+        Args:
+            None: 无输入参数
+
+        Returns:
+            None: 无返回值
+        """
         super().__init__(QQuickImageProvider.Image)
         self._image = QImage()
 
     def set_bgr(self, frame) -> None:
+        """将 OpenCV BGR 图像转换为 QImage 供 QML 预览
+
+        Args:
+            frame (Any): 参数 frame
+
+        Returns:
+            None: 无返回值
+        """
         if frame is None:
             self._image = QImage()
             return
@@ -80,6 +150,16 @@ class CameraImageProvider(QQuickImageProvider):
         self._image = image.copy()
 
     def requestImage(self, image_id, size, requested_size):  # noqa: N802 - Qt API
+        """响应 QML 图像提供器请求并返回最新预览图
+
+        Args:
+            image_id (Any): 参数 image_id
+            size (Any): 参数 size
+            requested_size (Any): 参数 requested_size
+
+        Returns:
+            None: 无返回值
+        """
         if self._image.isNull():
             fallback = QImage(1280, 720, QImage.Format_RGB32)
             fallback.fill(0x172033)
@@ -95,6 +175,14 @@ class CalibratorBackend(QObject):
     cameraStatusChanged = Signal(str)
 
     def __init__(self, image_provider: CameraImageProvider):
+        """初始化对象并保存运行所需的状态
+
+        Args:
+            image_provider (CameraImageProvider): 参数 image_provider
+
+        Returns:
+            None: 无返回值
+        """
         super().__init__()
         self.image_provider = image_provider
         self.config_path = DEFAULT_CONFIG
@@ -112,6 +200,14 @@ class CalibratorBackend(QObject):
 
     @Slot(result=str)
     def initialState(self) -> str:
+        """生成 GUI 初始化所需的完整状态 JSON
+
+        Args:
+            None: 无输入参数
+
+        Returns:
+            str: 函数执行结果
+        """
         project = self.cfg.get("project", {})
         robot = self.cfg.get("robot", {})
         board = self.cfg.get("board", {})
@@ -167,6 +263,14 @@ class CalibratorBackend(QObject):
         )
 
     def _state_to_config(self, state: dict) -> dict:
+        """将 GUI 状态转换为配置文件 schema
+
+        Args:
+            state (dict): 参数 state
+
+        Returns:
+            dict: 函数执行结果
+        """
         cameras = {}
         for name, payload in state.get("cameras", {}).items():
             cameras[name] = {
@@ -216,6 +320,14 @@ class CalibratorBackend(QObject):
         }
 
     def _next_sample_id(self, dataset_root: Path) -> int:
+        """根据数据集目录计算下一个样本编号
+
+        Args:
+            dataset_root (Path): 参数 dataset_root
+
+        Returns:
+            int: 函数执行结果
+        """
         samples_root = dataset_root / "samples"
         if not samples_root.exists():
             return 1
@@ -228,6 +340,14 @@ class CalibratorBackend(QObject):
 
     @Slot(str)
     def saveConfig(self, raw_state: str) -> None:
+        """保存当前 GUI 配置到 YAML 文件
+
+        Args:
+            raw_state (str): 参数 raw_state
+
+        Returns:
+            None: 无返回值
+        """
         state = _loads(raw_state)
         self.cfg = self._state_to_config(state)
         self.config_path = Path(state.get("configPath") or self.config_path)
@@ -236,6 +356,14 @@ class CalibratorBackend(QObject):
 
     @Slot(str)
     def loadConfig(self, path: str) -> None:
+        """从 YAML 文件加载配置并刷新 GUI 状态
+
+        Args:
+            path (str): 参数 path
+
+        Returns:
+            None: 无返回值
+        """
         self.config_path = Path(path) if path else self.config_path
         self.cfg = read_data(self.config_path)
         self.stateChanged.emit(self.initialState())
@@ -243,6 +371,14 @@ class CalibratorBackend(QObject):
 
     @Slot(str)
     def connectRos(self, raw_state: str) -> None:
+        """订阅配置中的 ROS 图像和 camera_info 话题
+
+        Args:
+            raw_state (str): 参数 raw_state
+
+        Returns:
+            None: 无返回值
+        """
         try:
             state = _loads(raw_state)
             self.cfg = self._state_to_config(state)
@@ -272,14 +408,38 @@ class CalibratorBackend(QObject):
 
     @Slot(str)
     def setPreviewCamera(self, name: str) -> None:
+        """切换当前预览相机
+
+        Args:
+            name (str): 参数 name
+
+        Returns:
+            None: 无返回值
+        """
         self.preview_camera = name or self.preview_camera
         self._tick()
 
     @Slot(result=str)
     def cameraStatusJson(self) -> str:
+        """返回多相机同步状态表 JSON
+
+        Args:
+            None: 无输入参数
+
+        Returns:
+            str: 函数执行结果
+        """
         return _json(self.camera_status)
 
     def _tick(self) -> None:
+        """周期性刷新预览图和多相机状态
+
+        Args:
+            None: 无输入参数
+
+        Returns:
+            None: 无返回值
+        """
         if self.ros_reader is None:
             return
         changed = False
@@ -288,7 +448,11 @@ class CalibratorBackend(QObject):
                 "image": "live" if cache.last_cv_image is not None else "等待",
                 "cameraInfo": "ok" if cache.last_camera_info else "等待",
                 "frameId": cache.frame_id,
-                "stamp": "" if cache.last_stamp_sec is None else f"{cache.last_stamp_sec:.3f}",
+                "stamp": (
+                    ""
+                    if cache.last_stamp_sec is None
+                    else f"{cache.last_stamp_sec:.3f}"
+                ),
             }
             if self.camera_status.get(name) != next_status:
                 self.camera_status[name] = next_status
@@ -307,6 +471,14 @@ class CalibratorBackend(QObject):
         self.previewStatusChanged.emit(f"{self.preview_camera}: live")
 
     def _task(self, state: dict) -> CalibrationTask:
+        """从 GUI 状态中解析当前标定任务
+
+        Args:
+            state (dict): 参数 state
+
+        Returns:
+            CalibrationTask: 函数执行结果
+        """
         task_name = state.get("activeTask", "")
         task_payload = next(
             (
@@ -327,28 +499,79 @@ class CalibratorBackend(QObject):
         )
 
     def _task_camera_names(self, task: CalibrationTask) -> List[str]:
+        """根据任务类型返回该任务需要的相机名称
+
+        Args:
+            task (CalibrationTask): 参数 task
+
+        Returns:
+            List[str]: 函数执行结果
+        """
         if task.type == "camera_to_camera":
             return [task.reference_camera, task.target_camera]
         return [task.camera]
 
     def _board_config(self, state: dict) -> dict:
+        """从 GUI 状态提取标定板配置
+
+        Args:
+            state (dict): 参数 state
+
+        Returns:
+            dict: 函数执行结果
+        """
         return self._state_to_config(state)["board"]
 
     def _camera_config(self, state: dict, name: str) -> dict:
+        """从 GUI 状态提取指定相机配置
+
+        Args:
+            state (dict): 参数 state
+            name (str): 参数 name
+
+        Returns:
+            dict: 函数执行结果
+        """
         return state.get("cameras", {}).get(name, {})
 
     def _camera_matrix(self, state: dict, name: str) -> np.ndarray:
+        """从指定相机备用内参构造相机矩阵
+
+        Args:
+            state (dict): 参数 state
+            name (str): 参数 name
+
+        Returns:
+            np.ndarray: 函数执行结果
+        """
         cfg = self._camera_config(state, name)
         return np.array(
             [
-                [float(cfg.get("fx", 600) or 600), 0.0, float(cfg.get("cx", 320) or 320)],
-                [0.0, float(cfg.get("fy", 600) or 600), float(cfg.get("cy", 240) or 240)],
+                [
+                    float(cfg.get("fx", 600) or 600),
+                    0.0,
+                    float(cfg.get("cx", 320) or 320),
+                ],
+                [
+                    0.0,
+                    float(cfg.get("fy", 600) or 600),
+                    float(cfg.get("cy", 240) or 240),
+                ],
                 [0.0, 0.0, 1.0],
             ],
             dtype=np.float64,
         )
 
     def _dist_coeffs(self, state: dict, name: str) -> np.ndarray:
+        """从指定相机备用配置解析畸变参数
+
+        Args:
+            state (dict): 参数 state
+            name (str): 参数 name
+
+        Returns:
+            np.ndarray: 函数执行结果
+        """
         cfg = self._camera_config(state, name)
         return np.array(
             [
@@ -360,6 +583,15 @@ class CalibratorBackend(QObject):
         )
 
     def _detect_for_camera(self, state: dict, name: str):
+        """对指定相机的最新图像运行标定板检测
+
+        Args:
+            state (dict): 参数 state
+            name (str): 参数 name
+
+        Returns:
+            None: 无返回值
+        """
         if self.ros_reader is None or name not in self.ros_reader.cameras:
             raise RuntimeError(f"相机未连接: {name}")
         cache = self.ros_reader.cameras[name]
@@ -378,6 +610,14 @@ class CalibratorBackend(QObject):
 
     @Slot(str)
     def testDetection(self, raw_state: str) -> None:
+        """测试当前预览相机的标定板检测效果
+
+        Args:
+            raw_state (str): 参数 raw_state
+
+        Returns:
+            None: 无返回值
+        """
         try:
             state = _loads(raw_state)
             name = state.get("previewCamera", self.preview_camera)
@@ -396,6 +636,14 @@ class CalibratorBackend(QObject):
 
     @Slot(str, result=str)
     def refreshTf(self, raw_state: str) -> str:
+        """查询 GUI 中指定 parent frame 到 child frame 的 TF
+
+        Args:
+            raw_state (str): 参数 raw_state
+
+        Returns:
+            str: 函数执行结果
+        """
         try:
             state = _loads(raw_state)
             if self.tf_reader is None:
@@ -414,6 +662,14 @@ class CalibratorBackend(QObject):
 
     @Slot(str, result=int)
     def captureSample(self, raw_state: str) -> int:
+        """采集当前任务所需图像、检测结果和可选机器人 TF
+
+        Args:
+            raw_state (str): 参数 raw_state
+
+        Returns:
+            int: 函数执行结果
+        """
         try:
             state = _loads(raw_state)
             self.cfg = self._state_to_config(state)
@@ -466,6 +722,14 @@ class CalibratorBackend(QObject):
             return int(_loads(raw_state).get("sampleId", 1))
 
     def _parse_T_tool_board(self, state: dict):
+        """从 GUI 输入解析 T_tool_board 齐次变换
+
+        Args:
+            state (dict): 参数 state
+
+        Returns:
+            None: 无返回值
+        """
         raw = [
             float(v.strip())
             for v in str(state.get("tToolBoard", "0,0,0,0,0,0,1")).split(",")
@@ -477,6 +741,14 @@ class CalibratorBackend(QObject):
 
     @Slot(str, result=str)
     def runCalibration(self, raw_state: str) -> str:
+        """运行当前任务的标定求解并导出结果
+
+        Args:
+            raw_state (str): 参数 raw_state
+
+        Returns:
+            str: 函数执行结果
+        """
         try:
             state = _loads(raw_state)
             self.cfg = self._state_to_config(state)
@@ -511,10 +783,20 @@ class CalibratorBackend(QObject):
 
     @Slot(str)
     def exportTf(self, raw_state: str) -> None:
+        """导出本次会话和已有结果文件组成的 static TF bundle
+
+        Args:
+            raw_state (str): 参数 raw_state
+
+        Returns:
+            None: 无返回值
+        """
         try:
             state = _loads(raw_state)
             loaded = []
-            for raw_path in str(state.get("resultFiles", "")).replace("\n", ",").split(","):
+            for raw_path in (
+                str(state.get("resultFiles", "")).replace("\n", ",").split(",")
+            ):
                 path = raw_path.strip()
                 if path:
                     loaded.append(load_result(Path(path)))
@@ -532,6 +814,14 @@ class CalibratorBackend(QObject):
 
 
 def main() -> None:
+    """命令行入口，解析参数并执行对应流程
+
+    Args:
+        None: 无输入参数
+
+    Returns:
+        None: 无返回值
+    """
     with TerminalSpinner("启动 Qt GUI..."):
         app = QGuiApplication(sys.argv)
         image_provider = CameraImageProvider()

@@ -7,6 +7,14 @@ from hand_eye_calibrator.core.transform import make_transform, quaternion_xyzw_t
 
 class TfReader:
     def __init__(self):
+        """初始化对象并保存运行所需的状态
+
+        Args:
+            None: 无输入参数
+
+        Returns:
+            None: 无返回值
+        """
         try:
             import rospy
             import tf2_ros
@@ -24,6 +32,16 @@ class TfReader:
     def lookup(
         self, parent_frame: str, child_frame: str, timeout_sec: float = 0.3
     ) -> np.ndarray:
+        """查询指定父子坐标系之间的 TF 变换
+
+        Args:
+            parent_frame (str): 参数 parent_frame
+            child_frame (str): 参数 child_frame
+            timeout_sec (float): 参数 timeout_sec
+
+        Returns:
+            np.ndarray: 函数执行结果
+        """
         msg = self.buffer.lookup_transform(
             parent_frame,
             child_frame,

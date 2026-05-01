@@ -4,6 +4,14 @@ from .charuco import CharucoDetector
 
 
 def create_board_detector(config: dict):
+    """根据标定板配置创建对应的检测器实例
+
+    Args:
+        config (dict): 参数 config
+
+    Returns:
+        None: 无返回值
+    """
     board_type = str(config.get("type", "chessboard")).lower()
     if board_type == "chessboard":
         return ChessboardDetector(config)
@@ -12,4 +20,9 @@ def create_board_detector(config: dict):
     raise ValueError(f"unsupported board type: {board_type}")
 
 
-__all__ = ["BoardObservation", "ChessboardDetector", "CharucoDetector", "create_board_detector"]
+__all__ = [
+    "BoardObservation",
+    "ChessboardDetector",
+    "CharucoDetector",
+    "create_board_detector",
+]

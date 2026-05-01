@@ -12,6 +12,14 @@ from hand_eye_calibrator.ros.tf_reader import TfReader
 
 
 def main() -> None:
+    """命令行入口，解析参数并执行对应流程
+
+    Args:
+        None: 无输入参数
+
+    Returns:
+        None: 无返回值
+    """
     parser = argparse.ArgumentParser(
         description="Validate that a TF transform is queryable."
     )

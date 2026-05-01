@@ -11,6 +11,16 @@ from hand_eye_calibrator.dataset.schema import CameraObservationRecord, SampleRe
 def list_sample_dirs(
     dataset_root: Path, min_id: Optional[int] = None, max_id: Optional[int] = None
 ) -> List[Path]:
+    """按编号范围列出数据集中的样本目录
+
+    Args:
+        dataset_root (Path): 参数 dataset_root
+        min_id (Optional[int]): 参数 min_id
+        max_id (Optional[int]): 参数 max_id
+
+    Returns:
+        List[Path]: 函数执行结果
+    """
     samples_root = dataset_root / "samples"
     if not samples_root.exists():
         return []
@@ -28,6 +38,14 @@ def list_sample_dirs(
 
 
 def _load_robot_pose(sample_dir: Path):
+    """从样本目录读取机器人 TF 位姿
+
+    Args:
+        sample_dir (Path): 参数 sample_dir
+
+    Returns:
+        None: 无返回值
+    """
     path = sample_dir / "robot_pose.yaml"
     if not path.exists():
         return None
@@ -38,6 +56,15 @@ def _load_robot_pose(sample_dir: Path):
 def _load_camera_observation(
     sample_dir: Path, camera_name: str
 ) -> Optional[CameraObservationRecord]:
+    """从样本目录读取单个相机的检测记录
+
+    Args:
+        sample_dir (Path): 参数 sample_dir
+        camera_name (str): 参数 camera_name
+
+    Returns:
+        Optional[CameraObservationRecord]: 函数执行结果
+    """
     camera_dir = sample_dir / camera_name
     detection_path = camera_dir / "detection.yaml"
     image_path = camera_dir / "image.png"
@@ -67,6 +94,17 @@ def load_dataset_records(
     min_id: Optional[int] = None,
     max_id: Optional[int] = None,
 ) -> List[SampleRecord]:
+    """加载数据集样本并组织为求解器输入记录
+
+    Args:
+        dataset_root (Path): 参数 dataset_root
+        camera_names (Sequence[str]): 参数 camera_names
+        min_id (Optional[int]): 参数 min_id
+        max_id (Optional[int]): 参数 max_id
+
+    Returns:
+        List[SampleRecord]: 函数执行结果
+    """
     records: List[SampleRecord] = []
     for sample_dir in list_sample_dirs(dataset_root, min_id, max_id):
         cameras: Dict[str, CameraObservationRecord] = {}

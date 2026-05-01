@@ -6,7 +6,18 @@ from typing import Iterable, Sequence, Tuple
 import numpy as np
 
 
-def make_transform(rotation: np.ndarray, translation_xyz: Sequence[float]) -> np.ndarray:
+def make_transform(
+    rotation: np.ndarray, translation_xyz: Sequence[float]
+) -> np.ndarray:
+    """根据旋转矩阵和平移向量构造 4x4 齐次变换矩阵
+
+    Args:
+        rotation (np.ndarray): 参数 rotation
+        translation_xyz (Sequence[float]): 参数 translation_xyz
+
+    Returns:
+        np.ndarray: 函数执行结果
+    """
     T = np.eye(4, dtype=np.float64)
     T[:3, :3] = np.asarray(rotation, dtype=np.float64).reshape(3, 3)
     T[:3, 3] = np.asarray(translation_xyz, dtype=np.float64).reshape(3)
@@ -14,6 +25,14 @@ def make_transform(rotation: np.ndarray, translation_xyz: Sequence[float]) -> np
 
 
 def invert_transform(T: np.ndarray) -> np.ndarray:
+    """计算 4x4 齐次变换矩阵的逆变换
+
+    Args:
+        T (np.ndarray): 参数 T
+
+    Returns:
+        np.ndarray: 函数执行结果
+    """
     T = np.asarray(T, dtype=np.float64).reshape(4, 4)
     inv = np.eye(4, dtype=np.float64)
     inv[:3, :3] = T[:3, :3].T
@@ -22,6 +41,14 @@ def invert_transform(T: np.ndarray) -> np.ndarray:
 
 
 def rotation_angle_deg(R: np.ndarray) -> float:
+    """计算旋转矩阵对应的旋转角度
+
+    Args:
+        R (np.ndarray): 参数 R
+
+    Returns:
+        float: 函数执行结果
+    """
     R = np.asarray(R, dtype=np.float64).reshape(3, 3)
     value = (np.trace(R) - 1.0) / 2.0
     value = float(np.clip(value, -1.0, 1.0))
@@ -29,6 +56,14 @@ def rotation_angle_deg(R: np.ndarray) -> float:
 
 
 def matrix_to_quaternion_xyzw(R: np.ndarray) -> Tuple[float, float, float, float]:
+    """将旋转矩阵转换为 xyzw 顺序四元数
+
+    Args:
+        R (np.ndarray): 参数 R
+
+    Returns:
+        Tuple[float, float, float, float]: 函数执行结果
+    """
     R = np.asarray(R, dtype=np.float64).reshape(3, 3)
     trace = float(np.trace(R))
     if trace > 0.0:
@@ -61,6 +96,14 @@ def matrix_to_quaternion_xyzw(R: np.ndarray) -> Tuple[float, float, float, float
 
 
 def quaternion_xyzw_to_matrix(q: Sequence[float]) -> np.ndarray:
+    """将 xyzw 顺序四元数转换为旋转矩阵
+
+    Args:
+        q (Sequence[float]): 参数 q
+
+    Returns:
+        np.ndarray: 函数执行结果
+    """
     qx, qy, qz, qw = [float(v) for v in q]
     n = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
     if n <= 0.0:
@@ -68,15 +111,35 @@ def quaternion_xyzw_to_matrix(q: Sequence[float]) -> np.ndarray:
     qx, qy, qz, qw = qx / n, qy / n, qz / n, qw / n
     return np.array(
         [
-            [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
-            [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
-            [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy)],
+            [
+                1 - 2 * (qy * qy + qz * qz),
+                2 * (qx * qy - qz * qw),
+                2 * (qx * qz + qy * qw),
+            ],
+            [
+                2 * (qx * qy + qz * qw),
+                1 - 2 * (qx * qx + qz * qz),
+                2 * (qy * qz - qx * qw),
+            ],
+            [
+                2 * (qx * qz - qy * qw),
+                2 * (qy * qz + qx * qw),
+                1 - 2 * (qx * qx + qy * qy),
+            ],
         ],
         dtype=np.float64,
     )
 
 
 def transform_to_dict(T: np.ndarray) -> dict:
+    """将齐次变换矩阵转换为可写入 YAML 的字典
+
+    Args:
+        T (np.ndarray): 参数 T
+
+    Returns:
+        dict: 函数执行结果
+    """
     T = np.asarray(T, dtype=np.float64).reshape(4, 4)
     return {
         "translation": [float(v) for v in T[:3, 3]],
@@ -86,6 +149,14 @@ def transform_to_dict(T: np.ndarray) -> dict:
 
 
 def transform_from_dict(payload: dict) -> np.ndarray:
+    """从字典载入齐次变换矩阵
+
+    Args:
+        payload (dict): 参数 payload
+
+    Returns:
+        np.ndarray: 函数执行结果
+    """
     if payload is None:
         raise ValueError("empty transform payload")
     if "matrix" in payload and payload["matrix"] is not None:
@@ -95,10 +166,20 @@ def transform_from_dict(payload: dict) -> np.ndarray:
             quaternion_xyzw_to_matrix(payload["rotation_xyzw"]),
             payload["translation"],
         )
-    raise ValueError("transform payload must contain matrix or translation+rotation_xyzw")
+    raise ValueError(
+        "transform payload must contain matrix or translation+rotation_xyzw"
+    )
 
 
 def quaternion_average_xyzw(quaternions: Iterable[Sequence[float]]) -> np.ndarray:
+    """对一组 xyzw 四元数进行符号一致的平均
+
+    Args:
+        quaternions (Iterable[Sequence[float]]): 参数 quaternions
+
+    Returns:
+        np.ndarray: 函数执行结果
+    """
     A = np.zeros((4, 4), dtype=np.float64)
     ref = None
     count = 0
@@ -121,15 +202,36 @@ def quaternion_average_xyzw(quaternions: Iterable[Sequence[float]]) -> np.ndarra
 
 
 def average_transforms(transforms: Sequence[np.ndarray]) -> np.ndarray:
+    """对一组齐次变换进行平移中位数和旋转平均融合
+
+    Args:
+        transforms (Sequence[np.ndarray]): 参数 transforms
+
+    Returns:
+        np.ndarray: 函数执行结果
+    """
     if not transforms:
         raise ValueError("cannot average zero transforms")
-    translations = np.array([np.asarray(T)[:3, 3] for T in transforms], dtype=np.float64)
+    translations = np.array(
+        [np.asarray(T)[:3, 3] for T in transforms], dtype=np.float64
+    )
     quaternions = [matrix_to_quaternion_xyzw(np.asarray(T)[:3, :3]) for T in transforms]
     q = quaternion_average_xyzw(quaternions)
     return make_transform(quaternion_xyzw_to_matrix(q), np.median(translations, axis=0))
 
 
-def transform_residual_metrics(reference: np.ndarray, estimates: Sequence[np.ndarray]) -> dict:
+def transform_residual_metrics(
+    reference: np.ndarray, estimates: Sequence[np.ndarray]
+) -> dict:
+    """计算一组变换相对参考变换的平移和旋转误差统计
+
+    Args:
+        reference (np.ndarray): 参数 reference
+        estimates (Sequence[np.ndarray]): 参数 estimates
+
+    Returns:
+        dict: 函数执行结果
+    """
     if not estimates:
         return {
             "translation_rms_m": None,
@@ -165,6 +267,15 @@ def transform_residual_metrics(reference: np.ndarray, estimates: Sequence[np.nda
 
 
 def scalar_error_stats(values: Sequence[float], prefix: str) -> dict:
+    """计算一组标量误差的均值、中位数、标准差、RMS 和最大值
+
+    Args:
+        values (Sequence[float]): 参数 values
+        prefix (str): 参数 prefix
+
+    Returns:
+        dict: 函数执行结果
+    """
     clean = np.array([float(v) for v in values if v is not None], dtype=np.float64)
     if clean.size == 0:
         return {

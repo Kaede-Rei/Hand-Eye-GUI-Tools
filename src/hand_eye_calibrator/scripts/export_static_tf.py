@@ -15,6 +15,14 @@ from hand_eye_calibrator.core.transform import transform_from_dict
 
 
 def main() -> None:
+    """命令行入口，解析参数并执行对应流程
+
+    Args:
+        None: 无输入参数
+
+    Returns:
+        None: 无返回值
+    """
     parser = argparse.ArgumentParser(
         description="Export static TF launch from result YAML files."
     )
