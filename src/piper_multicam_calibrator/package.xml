@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>piper_multicam_calibrator</name>
+  <version>0.1.0</version>
+  <description>C1 three-camera robot extrinsic calibration GUI and solvers.</description>
+
+  <maintainer email="user@example.com">AgroTech</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+
+  <export/>
+</package>
