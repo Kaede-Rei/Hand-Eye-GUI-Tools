@@ -1,8 +1,23 @@
-# 多功能手眼标定工具
+<div align="center">
 
-面向机器人多相机系统的 ROS Noetic 多模式外参标定工作区；仓库提供 PySide6 + QML 图形工具、标定板检测、数据集管理、三类外参求解器和静态 TF 导出入口
+# Hand-Eye/Cam-Cam Calibration GUI Tools
 
-当前工具覆盖腕上相机、外部相机和相机到相机的统一标定链路；采集侧订阅 ROS image / camera_info / TF，求解侧统一使用 `T_A_B` 变换约定，最终输出可直接接入 TF tree 的静态外参
+面向机器人多相机系统的 ROS Noetic 多模式外参标定工作区；本仓库提供了一套基于 **Qt 开发的图形工具（GUI）**，专注于简化复杂的标定流程
+
+![ROS](https://img.shields.io/badge/ROS-Noetic-22314E?logo=ros)
+![Python](https://img.shields.io/badge/Python-3.x-3776AB?logo=python)
+![Qt](https://img.shields.io/badge/GUI-Qt-41CD52?logo=qt)
+![OpenCV](https://img.shields.io/badge/Computer_Vision-OpenCV-5C3EE8?logo=opencv)
+
+</div>
+
+这套 **标定 GUI** 的核心能力包括：
+- **眼在手上 (Eye-in-Hand) 标定**：求解机械臂末端与腕上相机之间的位姿转换
+- **眼在手外 (Eye-to-Hand) 标定**：求解机械臂基座与外部固定相机之间的位姿转换
+- **相机到相机 (Camera-to-Camera) 标定**：求解多个相机之间的相对位姿变换
+- **多相机系统支持**：通过统一的图形界面，轻松管理采集、检测与求解，实现一套系统中多个相机的整体统一标定
+
+当前工具覆盖腕上相机、外部相机和相机到相机的统一标定链路；采集侧订阅 ROS image / camera_info / TF，求解侧统一使用 `T_A_B` 变换约定，最终输出可直接接入 TF tree 的静态外参，同时包含标定板检测、数据集管理等实用功能
 
 ## 标定目标
 
@@ -34,7 +49,7 @@ hand-eye-ws/
             ├── boards/                   # ChessBoard / ChArUco 检测
             ├── core/                     # 变换、四元数、IO、重投影误差
             ├── dataset/                  # 数据集 schema、加载与写入
-            ├── gui/                      # PySide6 + QML GUI
+            ├── gui/                      # Qt GUI 模块
             ├── report/                   # YAML、Markdown、static TF 导出
             ├── ros/                      # ROS topic 与 TF 适配
             └── solvers/                  # 三类外参求解器
@@ -50,7 +65,7 @@ hand-eye-ws/
 | `ros` | 缓存多相机图像、camera_info，查询 `tf2` 变换 |
 | `solvers` | 实现 `eye_in_hand`、`eye_to_hand_known_board`、`camera_to_camera` |
 | `report` | 导出结果 YAML、报告和静态 TF 启动文件 |
-| `gui` | 通过 PySide6 QObject 后端和 QML 前端提供采集、检测、标定和导出界面 |
+| `gui` | 通过 Qt 后端和前端提供采集、检测、标定和导出界面 |
 
 ## 环境
 
@@ -77,7 +92,7 @@ Python 运行时依赖：
 | `cv_bridge` | ROS Image 转 OpenCV 图像 |
 | `opencv-python` 或 ROS OpenCV | 棋盘格、PnP、hand-eye 求解 |
 | `opencv-contrib-python` 或带 `aruco` 的 ROS OpenCV | ChArUco 检测 |
-| `PySide6` | QML GUI、动画和现代桌面界面 |
+| `PySide6` / Qt 相关 | Qt 图形用户界面开发 |
 | `numpy` | 矩阵计算 |
 | `PyYAML` | YAML 配置和数据集 |
 
@@ -198,12 +213,6 @@ outputs/hand_eye_calibration_tf_<timestamp>/
 ```bash
 roslaunch outputs/hand_eye_calibration_tf_<timestamp>/static_tf.launch
 ```
-
-## 当前限制
-
-- `eye_to_hand_known_board` 使用已知 `T_tool_board` 的直接法和多帧鲁棒平均。
-- 未知 `T_tool_board` 的 robot-world / hand-eye 联合优化接口已保留，但未作为默认功能启用。
-- GUI 使用 PySide6 + QML 实现 macOS 风格半透明界面、动态渐变背景、卡片式布局和页面淡入动画。
 
 ## License
 
