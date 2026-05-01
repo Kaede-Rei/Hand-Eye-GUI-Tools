@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -21,6 +23,38 @@ from hand_eye_calibrator.ros.topic_reader import RosTopicReader
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[3] / "config" / "default.yaml"
 QML_MAIN = Path(__file__).resolve().parent / "qml" / "Main.qml"
+
+
+class TerminalSpinner:
+    def __init__(self, message: str):
+        self.message = message
+        self.enabled = sys.stderr.isatty()
+        self.done = threading.Event()
+        self.thread: threading.Thread | None = None
+
+    def __enter__(self):
+        if self.enabled:
+            self.thread = threading.Thread(target=self._run, daemon=True)
+            self.thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if not self.enabled:
+            return
+        self.done.set()
+        if self.thread is not None:
+            self.thread.join(timeout=0.4)
+        sys.stderr.write("\r" + " " * (len(self.message) + 12) + "\r")
+        sys.stderr.flush()
+
+    def _run(self) -> None:
+        frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        i = 0
+        while not self.done.is_set():
+            sys.stderr.write(f"\r{frames[i % len(frames)]} {self.message}")
+            sys.stderr.flush()
+            i += 1
+            time.sleep(0.08)
 
 
 def _json(payload) -> str:
@@ -446,13 +480,14 @@ class CalibratorBackend(QObject):
 
 
 def main() -> None:
-    app = QGuiApplication(sys.argv)
-    image_provider = CameraImageProvider()
-    backend = CalibratorBackend(image_provider)
-    engine = QQmlApplicationEngine()
-    engine.addImageProvider("camera", image_provider)
-    engine.rootContext().setContextProperty("backend", backend)
-    engine.load(QUrl.fromLocalFile(str(QML_MAIN)))
+    with TerminalSpinner("启动 Qt GUI..."):
+        app = QGuiApplication(sys.argv)
+        image_provider = CameraImageProvider()
+        backend = CalibratorBackend(image_provider)
+        engine = QQmlApplicationEngine()
+        engine.addImageProvider("camera", image_provider)
+        engine.rootContext().setContextProperty("backend", backend)
+        engine.load(QUrl.fromLocalFile(str(QML_MAIN)))
     if not engine.rootObjects():
         raise SystemExit("failed to load QML GUI")
     raise SystemExit(app.exec())

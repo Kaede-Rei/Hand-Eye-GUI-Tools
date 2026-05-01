@@ -4,6 +4,8 @@ from __future__ import annotations
 import os
 import site
 import sys
+import threading
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,7 +51,41 @@ def _bootstrap_pyside6_qt() -> None:
 
 _bootstrap_pyside6_qt()
 
-from hand_eye_calibrator.gui.main_window import main
+
+class _TerminalSpinner:
+    def __init__(self, message: str):
+        self.message = message
+        self.enabled = sys.stderr.isatty()
+        self.done = threading.Event()
+        self.thread: threading.Thread | None = None
+
+    def __enter__(self):
+        if self.enabled:
+            self.thread = threading.Thread(target=self._run, daemon=True)
+            self.thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if not self.enabled:
+            return
+        self.done.set()
+        if self.thread is not None:
+            self.thread.join(timeout=0.4)
+        sys.stderr.write("\r" + " " * (len(self.message) + 12) + "\r")
+        sys.stderr.flush()
+
+    def _run(self) -> None:
+        frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        i = 0
+        while not self.done.is_set():
+            sys.stderr.write(f"\r{frames[i % len(frames)]} {self.message}")
+            sys.stderr.flush()
+            i += 1
+            time.sleep(0.08)
+
+
+with _TerminalSpinner("加载 Qt 与标定后端..."):
+    from hand_eye_calibrator.gui.main_window import main
 
 if __name__ == "__main__":
     main()

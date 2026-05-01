@@ -8,14 +8,18 @@
 ![Python](https://img.shields.io/badge/Python-3.x-3776AB?logo=python)
 ![Qt](https://img.shields.io/badge/GUI-Qt-41CD52?logo=qt)
 ![OpenCV](https://img.shields.io/badge/Computer_Vision-OpenCV-5C3EE8?logo=opencv)
+![Platform](https://img.shields.io/badge/Platform-Ubuntu%2020.04-E95420?logo=ubuntu)
+![Catkin](https://img.shields.io/badge/Build-catkin-2F74C0)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 </div>
 
-这套 **标定 GUI** 的核心能力包括：
-- **眼在手上 (Eye-in-Hand) 标定**：求解机械臂末端与腕上相机之间的位姿转换
-- **眼在手外 (Eye-to-Hand) 标定**：求解机械臂基座与外部固定相机之间的位姿转换
-- **相机到相机 (Camera-to-Camera) 标定**：求解多个相机之间的相对位姿变换
-- **多相机系统支持**：通过统一的图形界面，轻松管理采集、检测与求解，实现一套系统中多个相机的整体统一标定
+这套 **标定 GUI** 面向机器人多相机外参标定，重点支持三类常见任务：
+- **眼在手上 (Eye-in-Hand)**：求解机械臂末端与末端相机之间的位姿变换
+- **眼在手外 (Eye-to-Hand)**：求解机械臂基座与外部固定相机之间的位姿变换
+- **相机间 (Camera-to-Camera)**：求解多相机系统中不同相机之间的相对位姿变换
+
+项目支持多相机统一配置、ROS 图像与 `camera_info` 订阅、TF 查询、标定板检测、样本数据集管理、三类外参求解、报告生成和 static TF 导出。GUI 基于 Qt 实现，目标是在一个工作台中完成采集、检测、求解和交付。
 
 当前工具覆盖腕上相机、外部相机和相机到相机的统一标定链路；采集侧订阅 ROS image / camera_info / TF，求解侧统一使用 `T_A_B` 变换约定，最终输出可直接接入 TF tree 的静态外参，同时包含标定板检测、数据集管理等实用功能
 
@@ -78,7 +82,7 @@ mamba-usb rosnoetic
 环境应至少提供：
 
 ```bash
-python -c "import rospy, cv2, PySide6"
+python -c "import rospy, cv2"
 which catkin_make
 ```
 
@@ -92,7 +96,7 @@ Python 运行时依赖：
 | `cv_bridge` | ROS Image 转 OpenCV 图像 |
 | `opencv-python` 或 ROS OpenCV | 棋盘格、PnP、hand-eye 求解 |
 | `opencv-contrib-python` 或带 `aruco` 的 ROS OpenCV | ChArUco 检测 |
-| `PySide6` / Qt 相关 | Qt 图形用户界面开发 |
+| Qt Python 绑定 | 图形用户界面开发 |
 | `numpy` | 矩阵计算 |
 | `PyYAML` | YAML 配置和数据集 |
 

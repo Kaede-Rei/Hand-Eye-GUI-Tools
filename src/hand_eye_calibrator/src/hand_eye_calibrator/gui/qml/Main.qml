@@ -16,6 +16,9 @@ ApplicationWindow {
 
     readonly property color macBlue: "#007AFF"
     readonly property color macBluePressed: "#0057B8"
+    readonly property color macBlueHover: "#0A84FF"
+    readonly property color macBlueSoft: "#EAF4FF"
+    readonly property color macBluePressedSoft: "#D6EAFF"
     readonly property color bg0: "#ECECF0"
     readonly property color sidebarBg: "#F5F5F7"
     readonly property color contentBg: "#FFFFFF"
@@ -38,11 +41,54 @@ ApplicationWindow {
     property string resultText: ""
     property string logs: ""
     property var cameraFields: ({})
+    property bool isBooting: true
+    property real pagePopScale: 1.0
+    property real pagePopOffset: 0
+    readonly property bool maximized: root.visibility === Window.Maximized
+    readonly property int frameMargin: maximized ? 0 : 18
+    readonly property int frameRadius: maximized ? 0 : 12
 
     Component.onCompleted: {
-        loadState(JSON.parse(backend.initialState()))
-        appendLog("PySide6 + QML GUI 已启动")
+        startupTimer.start()
     }
+
+    Timer {
+        id: startupTimer
+        interval: 70
+        repeat: false
+        onTriggered: {
+            startupProgress.indeterminate = false
+            startupProgress.value = 0.58
+            loadTimer.start()
+        }
+    }
+
+    Timer {
+        id: loadTimer
+        interval: 90
+        repeat: false
+        onTriggered: {
+            startupProgress.value = 0.86
+            loadState(JSON.parse(backend.initialState()))
+            appendLog("Qt GUI 已启动")
+            startupDoneTimer.start()
+        }
+    }
+
+    Timer {
+        id: startupDoneTimer
+        interval: 220
+        repeat: false
+        onTriggered: {
+            startupProgress.value = 1.0
+            root.isBooting = false
+        }
+    }
+
+    /*
+     * 启动阶段先让窗口和加载遮罩完成首帧绘制，再读取配置。
+     * 这样 ROS / Python 环境较慢时不会出现长时间空白窗口。
+     */
 
     Connections {
         target: backend
@@ -178,6 +224,9 @@ ApplicationWindow {
 
     component WindowShadow: Item {
         anchors.fill: parent
+        visible: !root.maximized
+        opacity: root.maximized ? 0 : 1
+        Behavior on opacity { NumberAnimation { duration: 160 } }
         Rectangle {
             anchors.fill: parent
             anchors.margins: 18
@@ -262,6 +311,7 @@ ApplicationWindow {
     }
 
     component MacComboBox: ComboBox {
+        id: combo
         font.family: root.fontStack
         font.pixelSize: 14
         contentItem: AppText {
@@ -269,21 +319,71 @@ ApplicationWindow {
             color: root.textPrimary
             verticalAlignment: Text.AlignVCenter
             leftPadding: 12
+            rightPadding: 34
         }
         background: Rectangle {
             radius: 9
-            color: root.fieldBg
+            color: combo.down ? root.macBluePressedSoft : combo.hovered ? root.macBlueSoft : root.fieldBg
             border.color: parent.activeFocus ? root.macBlue : "#D2D2D7"
             border.width: parent.activeFocus ? 2 : 1
+            Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutCubic } }
+            Behavior on border.color { ColorAnimation { duration: 120 } }
+        }
+        indicator: AppText {
+            x: combo.width - width - 13
+            y: combo.topPadding + (combo.availableHeight - height) / 2
+            text: "⌄"
+            color: combo.down || combo.activeFocus ? root.macBlue : root.textSecondary
+            font.pixelSize: 16
+            rotation: combo.popup.visible ? 180 : 0
+            Behavior on rotation { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+            Behavior on color { ColorAnimation { duration: 120 } }
         }
         delegate: ItemDelegate {
+            id: comboItem
             width: parent.width
+            required property int index
+            required property string modelData
             contentItem: AppText {
-                text: modelData
-                color: highlighted ? "white" : root.textPrimary
+                text: comboItem.modelData
+                color: combo.currentIndex === comboItem.index ? "white" : root.textPrimary
+                font.weight: combo.currentIndex === comboItem.index ? Font.DemiBold : Font.Normal
             }
             background: Rectangle {
-                color: highlighted ? root.macBlue : "#FFFFFF"
+                radius: 7
+                color: combo.currentIndex === comboItem.index ? root.macBlue : comboItem.hovered ? root.macBlueSoft : "#FFFFFF"
+                Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            }
+        }
+        popup: Popup {
+            y: combo.height + 6
+            width: combo.width
+            implicitHeight: Math.min(contentItem.implicitHeight + 12, 260)
+            padding: 6
+            transformOrigin: Item.Top
+            enter: Transition {
+                ParallelAnimation {
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 130; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: 150; easing.type: Easing.OutCubic }
+                }
+            }
+            exit: Transition {
+                ParallelAnimation {
+                    NumberAnimation { property: "opacity"; to: 0; duration: 90; easing.type: Easing.InCubic }
+                    NumberAnimation { property: "scale"; to: 0.98; duration: 90; easing.type: Easing.InCubic }
+                }
+            }
+            contentItem: ListView {
+                clip: true
+                implicitHeight: contentHeight
+                model: combo.popup.visible ? combo.delegateModel : null
+                currentIndex: combo.highlightedIndex
+            }
+            background: Rectangle {
+                radius: 12
+                color: "#FFFFFF"
+                border.color: "#D2D2D7"
+                border.width: 1
             }
         }
     }
@@ -326,8 +426,8 @@ ApplicationWindow {
         }
         background: Rectangle {
             radius: 10
-            color: btn.down ? root.macBluePressed : btn.hovered ? "#168BFF" : root.macBlue
-            Behavior on color { ColorAnimation { duration: 120 } }
+            color: btn.down ? root.macBluePressed : btn.hovered ? root.macBlueHover : root.macBlue
+            Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
         }
     }
 
@@ -345,8 +445,9 @@ ApplicationWindow {
         }
         background: Rectangle {
             radius: 10
-            color: btn.down ? "#D1D1D6" : btn.hovered ? "#E5E5EA" : "#F2F2F7"
+            color: btn.down ? root.macBluePressedSoft : btn.hovered ? root.macBlueSoft : "#F2F2F7"
             border.color: "#D2D2D7"
+            Behavior on color { ColorAnimation { duration: 130; easing.type: Easing.OutCubic } }
         }
     }
 
@@ -381,25 +482,81 @@ ApplicationWindow {
         id: nav
         property string label: ""
         property int index: 0
+        readonly property bool selected: root.currentPage === index
         width: parent ? parent.width : 220
         height: 38
         radius: 9
-        color: root.currentPage === index ? root.macBlue : navMouse.containsMouse ? "#E8E8ED" : "transparent"
-        Behavior on color { ColorAnimation { duration: 130 } }
+        color: selected ? root.macBlue : navMouse.pressed ? "#CBE4FF" : navMouse.containsMouse ? "#E2F1FF" : "transparent"
+        scale: navMouse.pressed && !selected ? 0.985 : 1
+        Behavior on color { ColorAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+        Rectangle {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: nav.selected ? 4 : 0
+            height: 20
+            radius: 2
+            color: "#FFFFFF"
+            opacity: nav.selected ? 1 : 0
+            Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: 140 } }
+        }
         AppText {
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
             anchors.leftMargin: 14
             text: nav.label
-            color: root.currentPage === index ? "white" : "#1D1D1F"
+            color: nav.selected ? "white" : "#1D1D1F"
             font.pixelSize: 14
-            font.weight: root.currentPage === index ? Font.DemiBold : Font.Normal
+            font.weight: nav.selected ? Font.DemiBold : Font.Normal
+            Behavior on color { ColorAnimation { duration: 140 } }
         }
         MouseArea {
             id: navMouse
             anchors.fill: parent
             hoverEnabled: true
             onClicked: root.currentPage = nav.index
+        }
+    }
+
+    component MacScrollView: ScrollView {
+        id: scroller
+        property int edgeDirection: 1
+        property real edgeOffset: 0
+        property double lastEdgePulseAt: 0
+        contentWidth: availableWidth
+        clip: true
+        ScrollBar.vertical.policy: ScrollBar.AsNeeded
+        transform: Translate { y: scroller.edgeOffset }
+        Behavior on edgeOffset { NumberAnimation { duration: 80; easing.type: Easing.OutCubic } }
+
+        function pulseEdge(deltaY) {
+            var flickable = contentItem
+            var maxY = Math.max(0, flickable.contentHeight - flickable.height)
+            if (maxY <= 1)
+                return
+            var atTop = flickable.contentY <= 0.5
+            var atBottom = flickable.contentY >= maxY - 0.5
+            var now = Date.now()
+            if (((deltaY > 0 && atTop) || (deltaY < 0 && atBottom)) && now - lastEdgePulseAt > 260) {
+                lastEdgePulseAt = now
+                edgeDirection = deltaY > 0 ? 1 : -1
+                edgePulse.restart()
+            }
+        }
+
+        WheelHandler {
+            target: null
+            blocking: false
+            onWheel: function(wheel) {
+                scroller.pulseEdge(wheel.angleDelta.y)
+            }
+        }
+
+        SequentialAnimation {
+            id: edgePulse
+            NumberAnimation { target: scroller; property: "edgeOffset"; to: scroller.edgeDirection * 7; duration: 70; easing.type: Easing.OutCubic }
+            NumberAnimation { target: scroller; property: "edgeOffset"; to: 0; duration: 210; easing.type: Easing.OutElastic }
         }
     }
 
@@ -454,11 +611,12 @@ ApplicationWindow {
     Rectangle {
         id: appFrame
         anchors.fill: parent
-        anchors.margins: 18
-        radius: 12
+        anchors.margins: root.frameMargin
+        radius: root.frameRadius
         color: root.contentBg
         border.color: "#D2D2D7"
         clip: true
+        Behavior on radius { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
         Rectangle {
             anchors.fill: parent
@@ -594,18 +752,49 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 color: root.contentBg
 
-                ColumnLayout {
+                SplitView {
                     anchors.fill: parent
                     anchors.margins: 22
-                    spacing: 18
+                    orientation: Qt.Vertical
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 14
+                    handle: Rectangle {
+                        implicitHeight: 10
+                        color: SplitHandle.hovered || SplitHandle.pressed ? "#E2F1FF" : "transparent"
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 64
+                            height: 3
+                            radius: 2
+                            color: SplitHandle.pressed ? root.macBlue : SplitHandle.hovered ? "#8DC6FF" : "#D2D2D7"
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                        }
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                    }
+
+                    SplitView {
+                        SplitView.fillWidth: true
+                        SplitView.minimumHeight: 250
+                        SplitView.preferredHeight: 470
+                        orientation: Qt.Horizontal
+
+                        handle: Rectangle {
+                            implicitWidth: 10
+                            color: SplitHandle.hovered || SplitHandle.pressed ? root.macBlueSoft : "transparent"
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: 3
+                                height: 54
+                                radius: 2
+                                color: SplitHandle.pressed ? root.macBlue : SplitHandle.hovered ? "#9CCBFF" : "#D2D2D7"
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                        }
 
                         Card {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 250
+                            SplitView.fillWidth: true
+                            SplitView.minimumWidth: 520
+                            SplitView.preferredWidth: 860
                             clip: true
                             color: "#111113"
                             Image {
@@ -637,8 +826,8 @@ ApplicationWindow {
                         }
 
                         Card {
-                            Layout.preferredWidth: 330
-                            Layout.preferredHeight: 250
+                            SplitView.minimumWidth: 300
+                            SplitView.preferredWidth: 330
                             ColumnLayout {
                                 anchors.fill: parent
                                 anchors.margins: 16
@@ -672,32 +861,43 @@ ApplicationWindow {
                         }
                     }
 
-                    Card {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        color: "#FFFFFF"
-                        clip: true
+                    Item {
+                        SplitView.fillWidth: true
+                        SplitView.fillHeight: true
+                        SplitView.minimumHeight: 250
 
-                        StackLayout {
-                            id: stack
+                        ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 18
-                            currentIndex: root.currentPage
-                            Behavior on opacity { NumberAnimation { duration: 140 } }
-                            onCurrentIndexChanged: {
-                                opacity = 0.35
-                                fadePage.restart()
-                            }
-                            NumberAnimation {
-                                id: fadePage
-                                target: stack
-                                property: "opacity"
-                                to: 1
-                                duration: 190
-                                easing.type: Easing.OutCubic
-                            }
+                            spacing: 18
 
-                            ScrollView {
+                            Card {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                color: "#FFFFFF"
+                                clip: true
+
+                                StackLayout {
+                                    id: stack
+                                    anchors.fill: parent
+                                    anchors.margins: 18
+                                    currentIndex: root.currentPage
+                                    scale: root.pagePopScale
+                                    transformOrigin: Item.Center
+                                    transform: Translate { y: root.pagePopOffset }
+                                    onCurrentIndexChanged: {
+                                        opacity = 0
+                                        root.pagePopScale = 0.965
+                                        root.pagePopOffset = 18
+                                        pagePop.restart()
+                                    }
+                                    ParallelAnimation {
+                                        id: pagePop
+                                        NumberAnimation { target: stack; property: "opacity"; to: 1; duration: 180; easing.type: Easing.OutCubic }
+                                        NumberAnimation { target: root; property: "pagePopScale"; to: 1; duration: 240; easing.type: Easing.OutBack }
+                                        NumberAnimation { target: root; property: "pagePopOffset"; to: 0; duration: 230; easing.type: Easing.OutCubic }
+                                    }
+
+                            MacScrollView {
                                 contentWidth: availableWidth
                                 ColumnLayout {
                                     width: parent.width
@@ -725,7 +925,7 @@ ApplicationWindow {
                                 }
                             }
 
-                            ScrollView {
+                            MacScrollView {
                                 contentWidth: availableWidth
                                 ColumnLayout {
                                     width: parent.width
@@ -737,7 +937,7 @@ ApplicationWindow {
                                 }
                             }
 
-                            ScrollView {
+                            MacScrollView {
                                 contentWidth: availableWidth
                                 ColumnLayout {
                                     width: parent.width
@@ -782,7 +982,7 @@ ApplicationWindow {
                                 }
                             }
 
-                            ScrollView {
+                            MacScrollView {
                                 contentWidth: availableWidth
                                 ColumnLayout {
                                     width: parent.width
@@ -816,7 +1016,7 @@ ApplicationWindow {
                                 }
                             }
 
-                            ScrollView {
+                            MacScrollView {
                                 contentWidth: availableWidth
                                 ColumnLayout {
                                     width: parent.width
@@ -833,7 +1033,7 @@ ApplicationWindow {
                                 }
                             }
 
-                            ScrollView {
+                            MacScrollView {
                                 contentWidth: availableWidth
                                 ColumnLayout {
                                     width: parent.width
@@ -854,7 +1054,7 @@ ApplicationWindow {
                                 }
                             }
 
-                            ScrollView {
+                            MacScrollView {
                                 contentWidth: availableWidth
                                 ColumnLayout {
                                     width: parent.width
@@ -918,6 +1118,91 @@ ApplicationWindow {
                             font.pixelSize: 12
                             background: Rectangle { color: "transparent" }
                         }
+                    }
+                }
+            }
+        }
+
+        }
+
+        }
+
+        Rectangle {
+            id: startupOverlay
+            anchors.fill: parent
+            radius: root.frameRadius
+            color: "#F5F5F7"
+            opacity: root.isBooting ? 1 : 0
+            visible: opacity > 0.01
+            z: 100
+            Behavior on opacity { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: 360
+                height: 188
+                radius: 22
+                color: "#FFFFFF"
+                border.color: "#E5E5EA"
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 26
+                    spacing: 16
+
+                    BusyIndicator {
+                        Layout.alignment: Qt.AlignHCenter
+                        running: root.isBooting
+                        implicitWidth: 44
+                        implicitHeight: 44
+                    }
+
+                    AppText {
+                        text: "正在启动标定工具..."
+                        Layout.alignment: Qt.AlignHCenter
+                        font.pixelSize: 18
+                        font.weight: Font.Bold
+                    }
+
+                    ProgressBar {
+                        id: startupProgress
+                        Layout.fillWidth: true
+                        from: 0
+                        to: 1
+                        value: 0.24
+                        indeterminate: true
+                        background: Rectangle {
+                            implicitHeight: 7
+                            radius: 4
+                            color: "#E5E5EA"
+                        }
+                        contentItem: Item {
+                            id: progressContent
+                            property real stripeX: -width * 0.36
+                            implicitHeight: 7
+                            Rectangle {
+                                width: startupProgress.indeterminate ? parent.width * 0.36 : startupProgress.visualPosition * parent.width
+                                height: parent.height
+                                radius: 4
+                                color: root.macBlue
+                                x: startupProgress.indeterminate ? parent.stripeX : 0
+                                Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                            }
+                            NumberAnimation on stripeX {
+                                from: -progressContent.width * 0.36
+                                to: progressContent.width
+                                duration: 980
+                                loops: Animation.Infinite
+                                running: startupProgress.indeterminate && root.isBooting
+                            }
+                        }
+                    }
+
+                    AppText {
+                        text: "加载配置、相机任务与 Qt 前端资源"
+                        Layout.alignment: Qt.AlignHCenter
+                        color: root.textSecondary
+                        font.pixelSize: 12
                     }
                 }
             }

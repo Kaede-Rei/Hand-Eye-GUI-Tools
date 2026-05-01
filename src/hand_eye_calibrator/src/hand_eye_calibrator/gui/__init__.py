@@ -1,1 +1,1 @@
-"""PyQt GUI components."""
+"""Qt GUI components."""

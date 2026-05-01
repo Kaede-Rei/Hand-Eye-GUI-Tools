@@ -3,11 +3,10 @@
 This ROS Noetic package provides the multi-function hand-eye calibration GUI and
 solver backend.
 
-## GUI Stack
+## GUI
 
-The GUI is implemented with PySide6 + QML. Python exposes the ROS, dataset and
-solver backend as a QObject bridge; QML owns the visual layout, animation,
-glass-style panels and interaction states.
+The GUI is implemented with Qt. The Python backend exposes ROS, dataset and
+solver operations to the desktop interface.
 
 ## Run
 
