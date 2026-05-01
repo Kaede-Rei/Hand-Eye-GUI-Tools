@@ -517,6 +517,7 @@ ApplicationWindow {
         id: scroller
         property int edgeDirection: 1
         property real edgeOffset: 0
+        property real smoothTargetY: 0
         property double lastEdgePulseAt: 0
         contentWidth: availableWidth
         clip: true
@@ -524,26 +525,39 @@ ApplicationWindow {
         transform: Translate { y: scroller.edgeOffset }
         Behavior on edgeOffset { NumberAnimation { duration: 80; easing.type: Easing.OutCubic } }
 
-        function pulseEdge(deltaY) {
+        function handleWheel(deltaY) {
             var flickable = contentItem
             var maxY = Math.max(0, flickable.contentHeight - flickable.height)
             if (maxY <= 1)
                 return
-            var atTop = flickable.contentY <= 0.5
-            var atBottom = flickable.contentY >= maxY - 0.5
+
+            var beforeY = flickable.contentY
+            var atTopBeforeWheel = beforeY <= 0.5 && smoothTargetY <= 0.5
+            var atBottomBeforeWheel = beforeY >= maxY - 0.5 && smoothTargetY >= maxY - 0.5
             var now = Date.now()
-            if (((deltaY > 0 && atTop) || (deltaY < 0 && atBottom)) && now - lastEdgePulseAt > 260) {
+
+            if (((deltaY > 0 && atTopBeforeWheel) || (deltaY < 0 && atBottomBeforeWheel)) && now - lastEdgePulseAt > 260) {
                 lastEdgePulseAt = now
                 edgeDirection = deltaY > 0 ? 1 : -1
                 edgePulse.restart()
+                return
             }
+
+            var baseY = smoothScroll.running ? smoothTargetY : beforeY
+            smoothTargetY = Math.max(0, Math.min(maxY, baseY - deltaY))
+            smoothScroll.stop()
+            smoothScroll.from = beforeY
+            smoothScroll.to = smoothTargetY
+            smoothScroll.restart()
         }
 
         WheelHandler {
             target: null
-            blocking: false
+            blocking: true
             onWheel: function(wheel) {
-                scroller.pulseEdge(wheel.angleDelta.y)
+                var deltaY = wheel.pixelDelta.y !== 0 ? wheel.pixelDelta.y : wheel.angleDelta.y / 120 * 56
+                scroller.handleWheel(deltaY)
+                wheel.accepted = true
             }
         }
 
@@ -551,6 +565,14 @@ ApplicationWindow {
             id: edgePulse
             NumberAnimation { target: scroller; property: "edgeOffset"; to: scroller.edgeDirection * 22; duration: 95; easing.type: Easing.OutCubic }
             NumberAnimation { target: scroller; property: "edgeOffset"; to: 0; duration: 300; easing.type: Easing.OutElastic }
+        }
+
+        NumberAnimation {
+            id: smoothScroll
+            target: scroller.contentItem
+            property: "contentY"
+            duration: 170
+            easing.type: Easing.OutCubic
         }
     }
 
