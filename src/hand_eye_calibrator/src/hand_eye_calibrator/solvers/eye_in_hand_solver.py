@@ -8,6 +8,7 @@ import numpy as np
 from hand_eye_calibrator.core.transform import (
     invert_transform,
     make_transform,
+    scalar_error_stats,
     transform_residual_metrics,
 )
 from hand_eye_calibrator.dataset.schema import CalibrationTask, SampleRecord
@@ -63,6 +64,12 @@ class EyeInHandSolver:
         ]
         mean_board = board_in_base[0]
         metrics = transform_residual_metrics(mean_board, board_in_base)
+        metrics.update(
+            scalar_error_stats(
+                [r.cameras[task.camera].reprojection_error_px for r in valid],
+                "reprojection_error_px",
+            )
+        )
         per_sample = []
         for record, T_base_board in zip(valid, board_in_base):
             E = invert_transform(mean_board) @ T_base_board

@@ -34,13 +34,15 @@ ApplicationWindow {
     property var navItems: ["项目", "相机", "标定板", "机器人 / TF", "任务", "采样", "标定 / 报告"]
     property int currentPage: 0
     property string activeTask: ""
-    property string previewCamera: "wrist"
+    property string previewCamera: ""
     property string previewSource: "image://camera/preview?rev=0"
     property string previewStatus: "等待相机画面"
     property string tfText: "未查询"
     property string resultText: ""
     property string logs: ""
-    property var cameraFields: ({})
+    property var cameraNames: []
+    property var cameraStatuses: ({})
+    property var cameraCardRefs: ({})
     property bool isBooting: true
     property real pagePopScale: 1.0
     property real pagePopOffset: 0
@@ -99,6 +101,7 @@ ApplicationWindow {
             previewSource = url
         }
         function onPreviewStatusChanged(message) { previewStatus = message }
+        function onCameraStatusChanged(rawStatus) { cameraStatuses = JSON.parse(rawStatus) }
     }
 
     function loadState(nextState) {
@@ -106,6 +109,10 @@ ApplicationWindow {
         tasks = nextState.tasks || []
         taskNames = tasks.map(function(t) { return t.name })
         activeTask = taskNames.length > 0 ? taskNames[0] : ""
+        var nextCameras = nextState.cameras || {}
+        cameraNames = nextState.cameraNames || Object.keys(nextCameras)
+        cameraStatuses = nextState.cameraStatuses || {}
+        previewCamera = cameraNames.length > 0 ? cameraNames[0] : ""
         projectName.text = nextState.projectName || ""
         datasetRoot.text = nextState.datasetRoot || ""
         outputRoot.text = nextState.outputRoot || ""
@@ -121,26 +128,16 @@ ApplicationWindow {
         charucoY.value = nextState.charucoY || 11
         markerLength.text = nextState.markerLength || "0.022"
         dictionary.text = nextState.dictionary || "DICT_5X5_100"
-        fx.text = nextState.fx || "600"
-        fy.text = nextState.fy || "600"
-        cx.text = nextState.cx || "320"
-        cy.text = nextState.cy || "240"
-        dist.text = nextState.dist || "0,0,0,0,0"
         sampleId.value = nextState.sampleId || 1
-        loadCameraFields("wrist", nextState.cameras.wrist || {})
-        loadCameraFields("mid", nextState.cameras.mid || {})
-        loadCameraFields("far", nextState.cameras.far || {})
+        for (var i = 0; i < cameraNames.length; ++i)
+            loadCameraFields(cameraNames[i], nextCameras[cameraNames[i]] || {})
     }
 
     function loadCameraFields(name, cfg) {
-        var card = cameraFields[name]
+        var card = cameraCardRefs[name]
         if (!card)
             return
-        card.imageTopic.text = cfg.imageTopic || ""
-        card.cameraInfoTopic.text = cfg.cameraInfoTopic || ""
-        card.frameId.text = cfg.frameId || ""
-        card.role.text = cfg.role || ""
-        card.status.text = cfg.status || "未连接"
+        card.load(cfg)
     }
 
     function collectState() {
@@ -160,34 +157,27 @@ ApplicationWindow {
             charucoY: charucoY.value,
             markerLength: markerLength.text,
             dictionary: dictionary.text,
-            fx: fx.text,
-            fy: fy.text,
-            cx: cx.text,
-            cy: cy.text,
-            dist: dist.text,
             sampleId: sampleId.value,
             minId: minId.value,
             maxId: maxId.value,
             method: methodBox.currentText,
             tToolBoard: tToolBoard.text,
+            resultFiles: resultFiles.text,
             activeTask: activeTask,
             previewCamera: previewCamera,
-            cameras: {
-                wrist: cameraPayload("wrist"),
-                mid: cameraPayload("mid"),
-                far: cameraPayload("far")
-            }
+            cameras: cameraPayloads()
         }
     }
 
-    function cameraPayload(name) {
-        var card = cameraFields[name]
-        return {
-            imageTopic: card.imageTopic.text,
-            cameraInfoTopic: card.cameraInfoTopic.text,
-            frameId: card.frameId.text,
-            role: card.role.text
+    function cameraPayloads() {
+        var payloads = {}
+        for (var i = 0; i < cameraNames.length; ++i) {
+            var name = cameraNames[i]
+            var card = cameraCardRefs[name]
+            if (card)
+                payloads[name] = card.collect()
         }
+        return payloads
     }
 
     function stateJson() { return JSON.stringify(collectState()) }
@@ -204,7 +194,7 @@ ApplicationWindow {
             if (tasks[i].name === activeTask) {
                 if (tasks[i].type === "camera_to_camera")
                     return "需要 " + tasks[i].reference_camera + " 与 " + tasks[i].target_camera + " 同时看到同一块标定板。"
-                return "需要 " + tasks[i].camera + " 图像、camera_info、" + baseFrame.text + " -> " + toolFrame.text + " TF。"
+                return "需要 " + tasks[i].camera + " 图像、camera_info、" + baseFrame.text + " -> " + toolFrame.text + " TF。TF 起点和终点可配置为任意 link。"
             }
         }
         return "请选择任务。"
@@ -561,14 +551,39 @@ ApplicationWindow {
     }
 
     component CameraCard: Card {
-        property string cameraName: "wrist"
+        property string cameraName: ""
         property alias imageTopic: imageTopicField
         property alias cameraInfoTopic: infoTopicField
         property alias frameId: frameIdField
         property alias role: roleField
         property alias status: statusLabel
         Layout.fillWidth: true
-        implicitHeight: 236
+        implicitHeight: 314
+        function load(cfg) {
+            imageTopicField.text = cfg.imageTopic || ""
+            infoTopicField.text = cfg.cameraInfoTopic || ""
+            frameIdField.text = cfg.frameId || ""
+            roleField.text = cfg.role || ""
+            fxField.text = cfg.fx || "600"
+            fyField.text = cfg.fy || "600"
+            cxField.text = cfg.cx || "320"
+            cyField.text = cfg.cy || "240"
+            distField.text = cfg.dist || "0,0,0,0,0"
+            statusLabel.text = cfg.status || "未连接"
+        }
+        function collect() {
+            return {
+                imageTopic: imageTopicField.text,
+                cameraInfoTopic: infoTopicField.text,
+                frameId: frameIdField.text,
+                role: roleField.text,
+                fx: fxField.text,
+                fy: fyField.text,
+                cx: cxField.text,
+                cy: cyField.text,
+                dist: distField.text
+            }
+        }
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 16
@@ -602,6 +617,20 @@ ApplicationWindow {
                 ModernField { id: frameIdField; Layout.fillWidth: true }
                 FieldLabel { text: "role" }
                 ModernField { id: roleField; Layout.fillWidth: true }
+                FieldLabel { text: "备用 fx / fy" }
+                RowLayout {
+                    Layout.fillWidth: true
+                    ModernField { id: fxField; Layout.fillWidth: true }
+                    ModernField { id: fyField; Layout.fillWidth: true }
+                }
+                FieldLabel { text: "备用 cx / cy" }
+                RowLayout {
+                    Layout.fillWidth: true
+                    ModernField { id: cxField; Layout.fillWidth: true }
+                    ModernField { id: cyField; Layout.fillWidth: true }
+                }
+                FieldLabel { text: "备用畸变 D" }
+                ModernField { id: distField; Layout.fillWidth: true }
             }
         }
     }
@@ -713,7 +742,7 @@ ApplicationWindow {
 
                     Card {
                         Layout.fillWidth: true
-                        implicitHeight: 120
+                        implicitHeight: 190
                         color: "#FFFFFF"
                         ColumnLayout {
                             anchors.fill: parent
@@ -727,7 +756,7 @@ ApplicationWindow {
                             }
                             MacComboBox {
                                 id: previewCameraBox
-                                model: ["wrist", "mid", "far"]
+                                model: root.cameraNames
                                 Layout.fillWidth: true
                                 onCurrentTextChanged: {
                                     root.previewCamera = currentText
@@ -740,6 +769,35 @@ ApplicationWindow {
                                 font.pixelSize: 12
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
+                            }
+                            Repeater {
+                                model: root.cameraNames
+                                RowLayout {
+                                    width: parent ? parent.width : 210
+                                    spacing: 6
+                                    AppText {
+                                        text: modelData
+                                        color: root.textSecondary
+                                        font.pixelSize: 11
+                                        Layout.fillWidth: true
+                                    }
+                                    AppText {
+                                        text: (root.cameraStatuses[modelData] || {}).image || "未连接"
+                                        color: ((root.cameraStatuses[modelData] || {}).image === "live") ? "#248A3D" : "#8E8E93"
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                    }
+                                    AppText {
+                                        text: (root.cameraStatuses[modelData] || {}).cameraInfo || "-"
+                                        color: ((root.cameraStatuses[modelData] || {}).cameraInfo === "ok") ? "#248A3D" : "#8E8E93"
+                                        font.pixelSize: 11
+                                    }
+                                    AppText {
+                                        text: (root.cameraStatuses[modelData] || {}).stamp || "-"
+                                        color: root.textSecondary
+                                        font.pixelSize: 11
+                                    }
+                                }
                             }
                         }
                     }
@@ -931,9 +989,18 @@ ApplicationWindow {
                                     width: parent.width
                                     spacing: 14
                                     SectionNote { text: "相机页配置多路 ROS 图像话题。采样时按任务自动保存需要的相机帧，frame_id 应填写对应 optical frame。" }
-                                    CameraCard { id: wristCard; cameraName: "wrist"; Component.onCompleted: cameraFields.wrist = wristCard }
-                                    CameraCard { id: midCard; cameraName: "mid"; Component.onCompleted: cameraFields.mid = midCard }
-                                    CameraCard { id: farCard; cameraName: "far"; Component.onCompleted: cameraFields.far = farCard }
+                                    Repeater {
+                                        id: cameraRepeater
+                                        model: root.cameraNames
+                                        CameraCard {
+                                            id: cameraCard
+                                            cameraName: modelData
+                                            Component.onCompleted: {
+                                                root.cameraCardRefs[cameraName] = cameraCard
+                                                root.loadCameraFields(cameraName, root.state.cameras ? (root.state.cameras[cameraName] || {}) : {})
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -942,7 +1009,7 @@ ApplicationWindow {
                                 ColumnLayout {
                                     width: parent.width
                                     spacing: 16
-                                    SectionNote { text: "标定板页设置检测参数和相机内参。连接 ROS 后若 camera_info 可用，检测会优先使用话题内参；这里是备用内参。" }
+                                    SectionNote { text: "标定板页设置检测参数。每个相机的备用内参在相机页独立配置；连接 ROS 后检测会优先使用各自 camera_info。" }
                                     GridLayout {
                                         columns: 2
                                         rowSpacing: 12
@@ -964,20 +1031,6 @@ ApplicationWindow {
                                         ModernField { id: markerLength; Layout.fillWidth: true }
                                         FieldLabel { text: "ArUco 字典" }
                                         ModernField { id: dictionary; Layout.fillWidth: true }
-                                        FieldLabel { text: "备用 fx / fy" }
-                                        RowLayout {
-                                            Layout.fillWidth: true
-                                            ModernField { id: fx; Layout.fillWidth: true }
-                                            ModernField { id: fy; Layout.fillWidth: true }
-                                        }
-                                        FieldLabel { text: "备用 cx / cy" }
-                                        RowLayout {
-                                            Layout.fillWidth: true
-                                            ModernField { id: cx; Layout.fillWidth: true }
-                                            ModernField { id: cy; Layout.fillWidth: true }
-                                        }
-                                        FieldLabel { text: "畸变参数 D" }
-                                        ModernField { id: dist; Layout.fillWidth: true }
                                     }
                                 }
                             }
@@ -1072,7 +1125,9 @@ ApplicationWindow {
                                         FieldLabel { text: "eye-in-hand 方法" }
                                         MacComboBox { id: methodBox; model: ["TSAI", "PARK", "HORAUD", "ANDREFF", "DANIILIDIS"]; Layout.fillWidth: true }
                                         FieldLabel { text: "T_tool_board" }
-                                        ModernField { id: tToolBoard; text: "0,0,0,0,0,0,1"; Layout.fillWidth: true }
+                                        ModernField { id: tToolBoard; text: ""; placeholderText: "留空则 eye-to-hand 联合估计 T_tool_board"; Layout.fillWidth: true }
+                                        FieldLabel { text: "已有结果 YAML" }
+                                        ModernField { id: resultFiles; placeholderText: "多个文件用逗号或换行分隔，用于统一导出 TF"; Layout.fillWidth: true }
                                     }
                                     RowLayout {
                                         Layout.fillWidth: true

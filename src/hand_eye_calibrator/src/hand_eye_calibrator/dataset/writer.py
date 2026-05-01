@@ -26,6 +26,8 @@ def write_sample(
     sample_id: int,
     camera_payloads: Dict[str, dict],
     T_base_tool=None,
+    robot_parent_frame: str = "base_link",
+    robot_child_frame: str = "link_tcp",
     used_for=None,
     sync_payload: Optional[dict] = None,
 ) -> Path:
@@ -49,8 +51,8 @@ def write_sample(
         write_data(
             sample_dir / "robot_pose.yaml",
             {
-                "base_frame": "base_link",
-                "tool_frame": "link_tcp",
+                "base_frame": robot_parent_frame,
+                "tool_frame": robot_child_frame,
                 "T_base_tool": transform_to_dict(T_base_tool),
                 "source": "tf2",
                 "timestamp": now,

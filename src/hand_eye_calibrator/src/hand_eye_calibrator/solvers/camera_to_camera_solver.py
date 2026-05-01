@@ -7,6 +7,7 @@ import numpy as np
 from hand_eye_calibrator.core.transform import (
     average_transforms,
     invert_transform,
+    scalar_error_stats,
     transform_residual_metrics,
 )
 from hand_eye_calibrator.dataset.schema import CalibrationTask, SampleRecord
@@ -42,6 +43,21 @@ class CameraToCameraSolver:
         ]
         T_ref_target = average_transforms(estimates)
         metrics = transform_residual_metrics(T_ref_target, estimates)
+        metrics.update(
+            scalar_error_stats(
+                [
+                    r.cameras[task.reference_camera].reprojection_error_px
+                    for r in valid
+                ],
+                "reference_reprojection_error_px",
+            )
+        )
+        metrics.update(
+            scalar_error_stats(
+                [r.cameras[task.target_camera].reprojection_error_px for r in valid],
+                "target_reprojection_error_px",
+            )
+        )
         per_sample = []
         ref_inv = invert_transform(T_ref_target)
         for record, estimate in zip(valid, estimates):

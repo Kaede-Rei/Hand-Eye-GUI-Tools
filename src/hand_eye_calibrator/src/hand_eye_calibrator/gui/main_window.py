@@ -17,7 +17,7 @@ from hand_eye_calibrator.core.io import read_data, write_data
 from hand_eye_calibrator.core.transform import make_transform, quaternion_xyzw_to_matrix
 from hand_eye_calibrator.dataset.loader import load_dataset_records
 from hand_eye_calibrator.dataset.schema import CalibrationTask
-from hand_eye_calibrator.report.exporter import export_result, export_tf_bundle
+from hand_eye_calibrator.report.exporter import export_result, export_tf_bundle, load_result
 from hand_eye_calibrator.ros.tf_reader import TfReader
 from hand_eye_calibrator.ros.topic_reader import RosTopicReader
 
@@ -92,6 +92,7 @@ class CalibratorBackend(QObject):
     stateChanged = Signal(str)
     imageChanged = Signal(str)
     previewStatusChanged = Signal(str)
+    cameraStatusChanged = Signal(str)
 
     def __init__(self, image_provider: CameraImageProvider):
         super().__init__()
@@ -101,7 +102,8 @@ class CalibratorBackend(QObject):
         self.ros_reader: Optional[RosTopicReader] = None
         self.tf_reader: Optional[TfReader] = None
         self.results = []
-        self.preview_camera = "wrist"
+        self.preview_camera = ""
+        self.camera_status: Dict[str, dict] = {}
         self.image_revision = 0
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
@@ -114,6 +116,9 @@ class CalibratorBackend(QObject):
         robot = self.cfg.get("robot", {})
         board = self.cfg.get("board", {})
         cameras = self.cfg.get("cameras", {})
+        camera_names = list(cameras.keys())
+        if camera_names and self.preview_camera not in camera_names:
+            self.preview_camera = camera_names[0]
         return _json(
             {
                 "configPath": str(self.config_path),
@@ -137,25 +142,27 @@ class CalibratorBackend(QObject):
                 "charucoY": int(board.get("squares_y", 11)),
                 "markerLength": str(board.get("marker_length_m", 0.022)),
                 "dictionary": board.get("dictionary", "DICT_5X5_100"),
-                "fx": "600",
-                "fy": "600",
-                "cx": "320",
-                "cy": "240",
-                "dist": "0,0,0,0,0",
                 "sampleId": self._next_sample_id(
                     Path(project.get("dataset_root", "./datasets/hand_eye_calibration"))
                 ),
                 "tasks": self.cfg.get("calibration_tasks", []),
+                "cameraNames": camera_names,
                 "cameras": {
                     name: {
                         "imageTopic": payload.get("image_topic", ""),
                         "cameraInfoTopic": payload.get("camera_info_topic", ""),
                         "frameId": payload.get("frame_id", ""),
                         "role": payload.get("role", ""),
+                        "fx": str(payload.get("fx", 600)),
+                        "fy": str(payload.get("fy", 600)),
+                        "cx": str(payload.get("cx", 320)),
+                        "cy": str(payload.get("cy", 240)),
+                        "dist": payload.get("dist", "0,0,0,0,0"),
                         "status": "未连接",
                     }
                     for name, payload in cameras.items()
                 },
+                "cameraStatuses": self.camera_status,
             }
         )
 
@@ -167,6 +174,11 @@ class CalibratorBackend(QObject):
                 "camera_info_topic": payload.get("cameraInfoTopic", ""),
                 "frame_id": payload.get("frameId", ""),
                 "role": payload.get("role", ""),
+                "fx": float(payload.get("fx", 600) or 600),
+                "fy": float(payload.get("fy", 600) or 600),
+                "cx": float(payload.get("cx", 320) or 320),
+                "cy": float(payload.get("cy", 240) or 240),
+                "dist": payload.get("dist", "0,0,0,0,0"),
             }
         board_type = state.get("boardType", "charuco")
         if board_type == "chessboard":
@@ -237,6 +249,7 @@ class CalibratorBackend(QObject):
             if self.ros_reader is not None:
                 self.ros_reader.shutdown()
             self.ros_reader = RosTopicReader()
+            self.camera_status = {}
             for name, payload in self.cfg.get("cameras", {}).items():
                 self.ros_reader.connect_camera(
                     name,
@@ -244,20 +257,44 @@ class CalibratorBackend(QObject):
                     payload.get("camera_info_topic", ""),
                     payload.get("frame_id", ""),
                 )
+                self.camera_status[name] = {
+                    "image": "等待",
+                    "cameraInfo": "等待",
+                    "frameId": payload.get("frame_id", ""),
+                    "stamp": "",
+                }
             self.logChanged.emit("ROS 图像与 camera_info 话题已订阅")
             self.previewStatusChanged.emit("ROS 已连接，等待图像帧")
+            self.cameraStatusChanged.emit(self.cameraStatusJson())
         except Exception as exc:
             self.logChanged.emit(f"ROS 连接失败: {exc}")
             self.previewStatusChanged.emit("ROS 连接失败")
 
     @Slot(str)
     def setPreviewCamera(self, name: str) -> None:
-        self.preview_camera = name or "wrist"
+        self.preview_camera = name or self.preview_camera
         self._tick()
+
+    @Slot(result=str)
+    def cameraStatusJson(self) -> str:
+        return _json(self.camera_status)
 
     def _tick(self) -> None:
         if self.ros_reader is None:
             return
+        changed = False
+        for name, cache in self.ros_reader.cameras.items():
+            next_status = {
+                "image": "live" if cache.last_cv_image is not None else "等待",
+                "cameraInfo": "ok" if cache.last_camera_info else "等待",
+                "frameId": cache.frame_id,
+                "stamp": "" if cache.last_stamp_sec is None else f"{cache.last_stamp_sec:.3f}",
+            }
+            if self.camera_status.get(name) != next_status:
+                self.camera_status[name] = next_status
+                changed = True
+        if changed:
+            self.cameraStatusChanged.emit(self.cameraStatusJson())
         cache = self.ros_reader.cameras.get(self.preview_camera)
         if cache is None:
             return
@@ -297,21 +334,26 @@ class CalibratorBackend(QObject):
     def _board_config(self, state: dict) -> dict:
         return self._state_to_config(state)["board"]
 
-    def _camera_matrix(self, state: dict) -> np.ndarray:
+    def _camera_config(self, state: dict, name: str) -> dict:
+        return state.get("cameras", {}).get(name, {})
+
+    def _camera_matrix(self, state: dict, name: str) -> np.ndarray:
+        cfg = self._camera_config(state, name)
         return np.array(
             [
-                [float(state.get("fx", 600)), 0.0, float(state.get("cx", 320))],
-                [0.0, float(state.get("fy", 600)), float(state.get("cy", 240))],
+                [float(cfg.get("fx", 600) or 600), 0.0, float(cfg.get("cx", 320) or 320)],
+                [0.0, float(cfg.get("fy", 600) or 600), float(cfg.get("cy", 240) or 240)],
                 [0.0, 0.0, 1.0],
             ],
             dtype=np.float64,
         )
 
-    def _dist_coeffs(self, state: dict) -> np.ndarray:
+    def _dist_coeffs(self, state: dict, name: str) -> np.ndarray:
+        cfg = self._camera_config(state, name)
         return np.array(
             [
                 float(v.strip())
-                for v in str(state.get("dist", "0,0,0,0,0")).split(",")
+                for v in str(cfg.get("dist", "0,0,0,0,0")).split(",")
                 if v.strip()
             ],
             dtype=np.float64,
@@ -323,8 +365,8 @@ class CalibratorBackend(QObject):
         cache = self.ros_reader.cameras[name]
         if cache.last_cv_image is None:
             raise RuntimeError(f"相机暂无图像: {name}")
-        K = self._camera_matrix(state)
-        D = self._dist_coeffs(state)
+        K = self._camera_matrix(state, name)
+        D = self._dist_coeffs(state, name)
         if cache.last_camera_info and cache.last_camera_info.get("K"):
             K = np.array(cache.last_camera_info["K"], dtype=np.float64).reshape(3, 3)
             D = np.array(cache.last_camera_info.get("D", D), dtype=np.float64)
@@ -408,6 +450,8 @@ class CalibratorBackend(QObject):
                 sample_id,
                 camera_payloads,
                 T_base_tool=T_base_tool,
+                robot_parent_frame=state.get("baseFrame", "base_link"),
+                robot_child_frame=state.get("toolFrame", "link_tcp"),
                 used_for=[task.name],
                 sync_payload={"max_camera_delta_ms": max_delta_ms},
             )
@@ -449,7 +493,9 @@ class CalibratorBackend(QObject):
             if task.type == "eye_in_hand":
                 kwargs["method"] = state.get("method", "TSAI")
             if task.type in ("eye_to_hand", "eye_to_hand_known_board"):
-                kwargs["T_tool_board"] = self._parse_T_tool_board(state)
+                raw_t = str(state.get("tToolBoard", "")).strip()
+                if raw_t:
+                    kwargs["T_tool_board"] = self._parse_T_tool_board(state)
             from hand_eye_calibrator.solvers import create_solver
 
             result = create_solver(task.type, **kwargs).solve(task, records)
@@ -467,14 +513,20 @@ class CalibratorBackend(QObject):
     def exportTf(self, raw_state: str) -> None:
         try:
             state = _loads(raw_state)
-            if not self.results:
+            loaded = []
+            for raw_path in str(state.get("resultFiles", "")).replace("\n", ",").split(","):
+                path = raw_path.strip()
+                if path:
+                    loaded.append(load_result(Path(path)))
+            results = [*loaded, *self.results]
+            if not results:
                 raise RuntimeError("当前 GUI 会话里没有可导出的标定结果")
             out = export_tf_bundle(
                 Path(state.get("outputRoot", "./outputs")),
                 state.get("projectName", "multifunction_hand_eye_calibration"),
-                self.results,
+                results,
             )
-            self.logChanged.emit(f"TF bundle 已导出: {out}")
+            self.logChanged.emit(f"TF bundle 已导出: {out}, transforms={len(results)}")
         except Exception as exc:
             self.logChanged.emit(f"TF 导出失败: {exc}")
 

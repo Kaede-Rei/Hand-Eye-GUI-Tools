@@ -9,21 +9,36 @@ robot:
   tf_timeout_sec: 0.3
 
 cameras:
-  wrist:
-    image_topic: /wrist_camera/color/image_raw
-    camera_info_topic: /wrist_camera/color/camera_info
-    frame_id: wrist_camera_color_optical_frame
-    role: wrist_eye_in_hand
-  mid:
-    image_topic: /mid_camera/color/image_raw
-    camera_info_topic: /mid_camera/color/camera_info
-    frame_id: mid_camera_color_optical_frame
-    role: external_mid
-  far:
-    image_topic: /far_camera/color/image_raw
-    camera_info_topic: /far_camera/color/camera_info
-    frame_id: far_camera_color_optical_frame
-    role: external_far
+  ee_camera:
+    image_topic: /ee_camera/color/image_raw
+    camera_info_topic: /ee_camera/color/camera_info
+    frame_id: ee_camera_color_optical_frame
+    role: eye_in_hand
+    fx: 600
+    fy: 600
+    cx: 320
+    cy: 240
+    dist: "0,0,0,0,0"
+  fixed_camera:
+    image_topic: /fixed_camera/color/image_raw
+    camera_info_topic: /fixed_camera/color/camera_info
+    frame_id: fixed_camera_color_optical_frame
+    role: eye_to_hand
+    fx: 600
+    fy: 600
+    cx: 320
+    cy: 240
+    dist: "0,0,0,0,0"
+  aux_camera:
+    image_topic: /aux_camera/color/image_raw
+    camera_info_topic: /aux_camera/color/camera_info
+    frame_id: aux_camera_color_optical_frame
+    role: auxiliary
+    fx: 600
+    fy: 600
+    cx: 320
+    cy: 240
+    dist: "0,0,0,0,0"
 
 board:
   type: charuco
@@ -34,19 +49,19 @@ board:
   dictionary: DICT_5X5_100
 
 calibration_tasks:
-  - name: wrist_eye_in_hand
+  - name: ee_eye_in_hand
     type: eye_in_hand
-    camera: wrist
+    camera: ee_camera
     output_parent: link_tcp
-    output_child: wrist_camera_color_optical_frame
-  - name: mid_eye_to_hand
-    type: eye_to_hand_known_board
-    camera: mid
+    output_child: ee_camera_color_optical_frame
+  - name: fixed_eye_to_hand
+    type: eye_to_hand
+    camera: fixed_camera
     output_parent: base_link
-    output_child: mid_camera_color_optical_frame
-  - name: far_to_mid
+    output_child: fixed_camera_color_optical_frame
+  - name: aux_to_fixed
     type: camera_to_camera
-    reference_camera: mid
-    target_camera: far
-    output_parent: mid_camera_color_optical_frame
-    output_child: far_camera_color_optical_frame
+    reference_camera: fixed_camera
+    target_camera: aux_camera
+    output_parent: fixed_camera_color_optical_frame
+    output_child: aux_camera_color_optical_frame

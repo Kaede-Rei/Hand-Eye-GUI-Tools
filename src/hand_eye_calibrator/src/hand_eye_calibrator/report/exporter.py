@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Iterable, TYPE_CHECKING
 
 from hand_eye_calibrator.core.io import ensure_dir, write_data
-from hand_eye_calibrator.core.transform import matrix_to_quaternion_xyzw
+from hand_eye_calibrator.core.transform import matrix_to_quaternion_xyzw, transform_from_dict
 
 if TYPE_CHECKING:
     from hand_eye_calibrator.solvers.base import CalibrationResult
@@ -27,6 +27,23 @@ def export_result(output_root: Path, result: CalibrationResult) -> Path:
     (out / "report.md").write_text(_report_markdown([result]), encoding="utf-8")
     result.output_dir = str(out)
     return out
+
+
+def load_result(path: Path) -> CalibrationResult:
+    from hand_eye_calibrator.core.io import read_data
+    from hand_eye_calibrator.solvers.base import CalibrationResult
+
+    payload = read_data(path)
+    return CalibrationResult(
+        payload["task_name"],
+        payload["task_type"],
+        payload["parent_frame"],
+        payload["child_frame"],
+        transform_from_dict(payload["T_parent_child"]),
+        payload.get("sample_ids", []),
+        payload.get("metrics", {}),
+        payload.get("per_sample", []),
+    )
 
 
 def export_tf_bundle(

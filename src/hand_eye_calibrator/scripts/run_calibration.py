@@ -51,13 +51,10 @@ def main() -> None:
     records = load_dataset_records(dataset_root, cameras, args.min_id, args.max_id)
     kwargs = {}
     if task.type in ("eye_to_hand", "eye_to_hand_known_board"):
-        if not args.t_tool_board_yaml:
-            raise SystemExit(
-                "--t-tool-board-yaml is required for eye_to_hand_known_board"
+        if args.t_tool_board_yaml:
+            kwargs["T_tool_board"] = transform_from_dict(
+                read_data(Path(args.t_tool_board_yaml))["T_tool_board"]
             )
-        kwargs["T_tool_board"] = transform_from_dict(
-            read_data(Path(args.t_tool_board_yaml))["T_tool_board"]
-        )
     result = create_solver(task.type, **kwargs).solve(task, records)
     out = export_result(output_root, result)
     print(f"wrote {out}")

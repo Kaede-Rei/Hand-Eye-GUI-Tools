@@ -26,8 +26,8 @@ python3 src/hand_eye_calibrator/scripts/multicam_calibrator_gui.py
 
 ## Calibration Modes
 
-- `eye_in_hand`: solves `link_tcp -> wrist_camera_color_optical_frame`
-- `eye_to_hand_known_board`: solves `base_link -> mid_camera_color_optical_frame`
-- `camera_to_camera`: solves `mid_camera_color_optical_frame -> far_camera_color_optical_frame`
+- `eye_in_hand`: solves end-effector link -> end-effector camera
+- `eye_to_hand` / `eye_to_hand_known_board`: solves base/world link -> fixed camera
+- `camera_to_camera`: solves reference camera -> target camera
 
 `eye_to_hand_known_board` requires a measured `T_tool_board`.

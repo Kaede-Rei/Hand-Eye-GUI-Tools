@@ -131,7 +131,18 @@ def average_transforms(transforms: Sequence[np.ndarray]) -> np.ndarray:
 
 def transform_residual_metrics(reference: np.ndarray, estimates: Sequence[np.ndarray]) -> dict:
     if not estimates:
-        return {"translation_rms_m": None, "translation_max_m": None, "rotation_rms_deg": None, "rotation_max_deg": None}
+        return {
+            "translation_rms_m": None,
+            "translation_mean_m": None,
+            "translation_median_m": None,
+            "translation_std_m": None,
+            "translation_max_m": None,
+            "rotation_rms_deg": None,
+            "rotation_mean_deg": None,
+            "rotation_median_deg": None,
+            "rotation_std_deg": None,
+            "rotation_max_deg": None,
+        }
     t_errors = []
     r_errors = []
     ref_inv = invert_transform(reference)
@@ -141,7 +152,32 @@ def transform_residual_metrics(reference: np.ndarray, estimates: Sequence[np.nda
         r_errors.append(rotation_angle_deg(E[:3, :3]))
     return {
         "translation_rms_m": float(np.sqrt(np.mean(np.square(t_errors)))),
+        "translation_mean_m": float(np.mean(t_errors)),
+        "translation_median_m": float(np.median(t_errors)),
+        "translation_std_m": float(np.std(t_errors)),
         "translation_max_m": float(np.max(t_errors)),
         "rotation_rms_deg": float(np.sqrt(np.mean(np.square(r_errors)))),
+        "rotation_mean_deg": float(np.mean(r_errors)),
+        "rotation_median_deg": float(np.median(r_errors)),
+        "rotation_std_deg": float(np.std(r_errors)),
         "rotation_max_deg": float(np.max(r_errors)),
+    }
+
+
+def scalar_error_stats(values: Sequence[float], prefix: str) -> dict:
+    clean = np.array([float(v) for v in values if v is not None], dtype=np.float64)
+    if clean.size == 0:
+        return {
+            f"{prefix}_mean": None,
+            f"{prefix}_median": None,
+            f"{prefix}_std": None,
+            f"{prefix}_rms": None,
+            f"{prefix}_max": None,
+        }
+    return {
+        f"{prefix}_mean": float(np.mean(clean)),
+        f"{prefix}_median": float(np.median(clean)),
+        f"{prefix}_std": float(np.std(clean)),
+        f"{prefix}_rms": float(np.sqrt(np.mean(np.square(clean)))),
+        f"{prefix}_max": float(np.max(clean)),
     }
