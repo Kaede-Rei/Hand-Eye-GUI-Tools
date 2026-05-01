@@ -1,8 +1,8 @@
-# Piper Multi-Camera Calibrator
+# 多功能手眼标定工具
 
-面向 C1 三相机系统的 ROS Noetic 多模式外参标定工作区；仓库提供 PyQt5 图形工具、标定板检测、数据集管理、三类外参求解器和静态 TF 导出入口
+面向机器人多相机系统的 ROS Noetic 多模式外参标定工作区；仓库提供 PySide6 + QML 图形工具、标定板检测、数据集管理、三类外参求解器和静态 TF 导出入口
 
-当前工具以 `piper_multicam_calibrator` 为核心包，覆盖腕上近景相机、中景外部相机和外景相机的统一标定链路；采集侧订阅 ROS image / camera_info / TF，求解侧统一使用 `T_A_B` 变换约定，最终输出可直接接入 TF tree 的静态外参
+当前工具覆盖腕上相机、外部相机和相机到相机的统一标定链路；采集侧订阅 ROS image / camera_info / TF，求解侧统一使用 `T_A_B` 变换约定，最终输出可直接接入 TF tree 的静态外参
 
 ## 标定目标
 
@@ -13,8 +13,6 @@ base_link
 └── link_tcp
     └── wrist_camera_color_optical_frame
 ```
-
-核心任务：
 
 | 任务 | 类型 | 输入 | 输出 |
 |---|---|---|---|
@@ -29,25 +27,14 @@ hand-eye-ws/
 ├── README.md
 ├── plan.md
 └── src/
-    └── piper_multicam_calibrator/
-        ├── CMakeLists.txt
-        ├── package.xml
-        ├── setup.py
+    └── hand_eye_calibrator/
         ├── config/
-        │   ├── c1_three_camera.yaml
-        │   ├── board_chessboard.yaml
-        │   └── board_charuco.yaml
         ├── scripts/
-        │   ├── multicam_calibrator_gui.py
-        │   ├── run_calibration.py
-        │   ├── export_static_tf.py
-        │   ├── validate_tf.py
-        │   └── collect_dataset_node.py
-        └── src/piper_multicam_calibrator/
+        └── src/hand_eye_calibrator/
             ├── boards/                   # ChessBoard / ChArUco 检测
             ├── core/                     # 变换、四元数、IO、重投影误差
             ├── dataset/                  # 数据集 schema、加载与写入
-            ├── gui/                      # PyQt5 GUI
+            ├── gui/                      # PySide6 + QML GUI
             ├── report/                   # YAML、Markdown、static TF 导出
             ├── ros/                      # ROS topic 与 TF 适配
             └── solvers/                  # 三类外参求解器
@@ -63,16 +50,20 @@ hand-eye-ws/
 | `ros` | 缓存多相机图像、camera_info，查询 `tf2` 变换 |
 | `solvers` | 实现 `eye_in_hand`、`eye_to_hand_known_board`、`camera_to_camera` |
 | `report` | 导出结果 YAML、报告和静态 TF 启动文件 |
-| `gui` | 提供多页式图形采集、检测、标定和导出界面 |
+| `gui` | 通过 PySide6 QObject 后端和 QML 前端提供采集、检测、标定和导出界面 |
 
 ## 环境
 
-工作区面向 ROS Noetic：
+工作区面向 ROS Noetic，推荐使用项目机器上的 `mamba-usb rosnoetic` 环境：
+
+```bash
+mamba-usb rosnoetic
+```
 
 环境应至少提供：
 
 ```bash
-python -c "import rospy, cv2, PyQt5"
+python -c "import rospy, cv2, PySide6"
 which catkin_make
 ```
 
@@ -86,7 +77,7 @@ Python 运行时依赖：
 | `cv_bridge` | ROS Image 转 OpenCV 图像 |
 | `opencv-python` 或 ROS OpenCV | 棋盘格、PnP、hand-eye 求解 |
 | `opencv-contrib-python` 或带 `aruco` 的 ROS OpenCV | ChArUco 检测 |
-| `PyQt5` | GUI |
+| `PySide6` | QML GUI、动画和现代桌面界面 |
 | `numpy` | 矩阵计算 |
 | `PyYAML` | YAML 配置和数据集 |
 
@@ -94,6 +85,7 @@ Python 运行时依赖：
 
 ```bash
 cd /path/to/hand-eye-ws
+mamba-usb rosnoetic
 catkin_make -DCATKIN_ENABLE_TESTING=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 source devel/setup.bash
 ```
@@ -103,13 +95,13 @@ source devel/setup.bash
 通过 ROS 包入口启动：
 
 ```bash
-rosrun piper_multicam_calibrator multicam_calibrator_gui.py
+rosrun hand_eye_calibrator multicam_calibrator_gui.py
 ```
 
 直接从源码启动：
 
 ```bash
-python3 src/piper_multicam_calibrator/scripts/multicam_calibrator_gui.py
+python3 src/hand_eye_calibrator/scripts/multicam_calibrator_gui.py
 ```
 
 GUI 页面：
@@ -127,7 +119,7 @@ GUI 页面：
 ## 数据集格式
 
 ```text
-datasets/c1_three_camera/
+datasets/hand_eye_calibration/
 ├── meta.yaml
 ├── cameras.yaml
 ├── board.yaml
@@ -141,48 +133,7 @@ datasets/c1_three_camera/
         │   ├── detection.yaml
         │   └── annotated.png
         ├── mid/
-        │   ├── image.png
-        │   ├── camera_info.yaml
-        │   ├── detection.yaml
-        │   └── annotated.png
         └── far/
-            ├── image.png
-            ├── camera_info.yaml
-            ├── detection.yaml
-            └── annotated.png
-```
-
-`sample.yaml` 记录样本编号、时间戳、任务名、有效相机和时间同步信息；`robot_pose.yaml` 记录 `T_base_tool`；每个相机目录保存原图、内参、检测结果和角点可视化
-
-## 配置
-
-默认配置位于：
-
-```text
-src/piper_multicam_calibrator/config/c1_three_camera.yaml
-```
-
-相机配置示例：
-
-```yaml
-cameras:
-  wrist:
-    image_topic: /wrist_camera/color/image_raw
-    camera_info_topic: /wrist_camera/color/camera_info
-    frame_id: wrist_camera_color_optical_frame
-    role: wrist_eye_in_hand
-```
-
-任务配置示例：
-
-```yaml
-calibration_tasks:
-  - name: far_to_mid
-    type: camera_to_camera
-    reference_camera: mid
-    target_camera: far
-    output_parent: mid_camera_color_optical_frame
-    output_child: far_camera_color_optical_frame
 ```
 
 ## 命令行标定
@@ -190,16 +141,16 @@ calibration_tasks:
 运行 wrist eye-in-hand：
 
 ```bash
-rosrun piper_multicam_calibrator run_calibration.py \
-  --config src/piper_multicam_calibrator/config/c1_three_camera.yaml \
+rosrun hand_eye_calibrator run_calibration.py \
+  --config src/hand_eye_calibrator/config/default.yaml \
   --task wrist_eye_in_hand
 ```
 
 运行 mid eye-to-hand 已知板模式：
 
 ```bash
-rosrun piper_multicam_calibrator run_calibration.py \
-  --config src/piper_multicam_calibrator/config/c1_three_camera.yaml \
+rosrun hand_eye_calibrator run_calibration.py \
+  --config src/hand_eye_calibrator/config/default.yaml \
   --task mid_eye_to_hand \
   --t-tool-board-yaml ./config/my_tool_board.yaml
 ```
@@ -215,11 +166,11 @@ T_tool_board:
 导出静态 TF：
 
 ```bash
-rosrun piper_multicam_calibrator export_static_tf.py \
+rosrun hand_eye_calibrator export_static_tf.py \
   outputs/wrist_eye_in_hand_*/wrist_eye_in_hand.yaml \
   outputs/mid_eye_to_hand_*/mid_eye_to_hand.yaml \
   outputs/far_to_mid_*/far_to_mid.yaml \
-  --project c1_three_camera
+  --project hand_eye_calibration
 ```
 
 ## 输出
@@ -235,8 +186,8 @@ outputs/<task>_<timestamp>/
 TF bundle 输出：
 
 ```text
-outputs/c1_three_camera_tf_<timestamp>/
-├── c1_tf_tree.yaml
+outputs/hand_eye_calibration_tf_<timestamp>/
+├── tf_tree.yaml
 ├── static_tf.launch
 ├── static_tf.sh
 └── report.md
@@ -245,5 +196,15 @@ outputs/c1_three_camera_tf_<timestamp>/
 `static_tf.launch` 可直接发布：
 
 ```bash
-roslaunch outputs/c1_three_camera_tf_<timestamp>/static_tf.launch
+roslaunch outputs/hand_eye_calibration_tf_<timestamp>/static_tf.launch
 ```
+
+## 当前限制
+
+- `eye_to_hand_known_board` 使用已知 `T_tool_board` 的直接法和多帧鲁棒平均。
+- 未知 `T_tool_board` 的 robot-world / hand-eye 联合优化接口已保留，但未作为默认功能启用。
+- GUI 使用 PySide6 + QML 实现 macOS 风格半透明界面、动态渐变背景、卡片式布局和页面淡入动画。
+
+## License
+
+MIT. See `src/hand_eye_calibrator/package.xml`.
