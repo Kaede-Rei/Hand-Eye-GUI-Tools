@@ -45,6 +45,8 @@ ApplicationWindow {
     property var cameraStatuses: ({})
     property var cameraCardRefs: ({})
     property bool isBooting: true
+    property bool isWorking: false
+    property string workText: "正在处理..."
     property real pagePopScale: 1.0
     property real pagePopOffset: 0
     readonly property bool maximized: root.visibility === Window.Maximized
@@ -85,6 +87,22 @@ ApplicationWindow {
         onTriggered: {
             startupProgress.value = 1.0
             root.isBooting = false
+        }
+    }
+
+    Timer {
+        id: workTimer
+        interval: 40
+        repeat: false
+        property var callback: null
+        onTriggered: {
+            try {
+                if (callback)
+                    callback()
+            } finally {
+                callback = null
+                root.isWorking = false
+            }
         }
     }
 
@@ -190,6 +208,15 @@ ApplicationWindow {
             var flickable = logScroll.contentItem
             flickable.contentY = Math.max(0, flickable.contentHeight - flickable.height)
         })
+    }
+
+    function runWithBusy(message, callback) {
+        if (root.isWorking)
+            return
+        root.workText = message
+        root.isWorking = true
+        workTimer.callback = callback
+        workTimer.restart()
     }
 
     function activeTaskHint() {
@@ -935,17 +962,26 @@ ApplicationWindow {
                                 SecondaryButton {
                                     text: "连接 ROS 话题"
                                     Layout.fillWidth: true
-                                    onClicked: backend.connectRos(root.stateJson())
+                                    enabled: !root.isWorking
+                                    onClicked: root.runWithBusy("正在连接 ROS 话题...", function() {
+                                        backend.connectRos(root.stateJson())
+                                    })
                                 }
                                 SecondaryButton {
                                     text: "测试当前检测"
                                     Layout.fillWidth: true
-                                    onClicked: backend.testDetection(root.stateJson())
+                                    enabled: !root.isWorking
+                                    onClicked: root.runWithBusy("正在检测标定板...", function() {
+                                        backend.testDetection(root.stateJson())
+                                    })
                                 }
                                 PrimaryButton {
                                     text: "采集当前任务样本"
                                     Layout.fillWidth: true
-                                    onClicked: sampleId.value = backend.captureSample(root.stateJson())
+                                    enabled: !root.isWorking
+                                    onClicked: root.runWithBusy("正在采集样本...", function() {
+                                        sampleId.value = backend.captureSample(root.stateJson())
+                                    })
                                 }
                                 AppText {
                                     text: "当前页：" + root.navItems[root.currentPage]
@@ -1092,7 +1128,10 @@ ApplicationWindow {
                                     }
                                     PrimaryButton {
                                         text: "刷新 base -> tool TF"
-                                        onClicked: root.tfText = backend.refreshTf(root.stateJson())
+                                        enabled: !root.isWorking
+                                        onClicked: root.runWithBusy("正在查询 TF...", function() {
+                                            root.tfText = backend.refreshTf(root.stateJson())
+                                        })
                                     }
                                     TextArea {
                                         Layout.fillWidth: true
@@ -1139,7 +1178,10 @@ ApplicationWindow {
                                     }
                                     PrimaryButton {
                                         text: "采集当前任务样本"
-                                        onClicked: sampleId.value = backend.captureSample(root.stateJson())
+                                        enabled: !root.isWorking
+                                        onClicked: root.runWithBusy("正在采集样本...", function() {
+                                            sampleId.value = backend.captureSample(root.stateJson())
+                                        })
                                     }
                                 }
                             }
@@ -1171,12 +1213,18 @@ ApplicationWindow {
                                         PrimaryButton {
                                             text: "运行标定"
                                             Layout.fillWidth: true
-                                            onClicked: resultText = backend.runCalibration(root.stateJson())
+                                            enabled: !root.isWorking
+                                            onClicked: root.runWithBusy("正在运行标定...", function() {
+                                                resultText = backend.runCalibration(root.stateJson())
+                                            })
                                         }
                                         SecondaryButton {
                                             text: "导出 TF"
                                             Layout.fillWidth: true
-                                            onClicked: backend.exportTf(root.stateJson())
+                                            enabled: !root.isWorking
+                                            onClicked: root.runWithBusy("正在导出 TF...", function() {
+                                                backend.exportTf(root.stateJson())
+                                            })
                                         }
                                     }
                                     TextArea {
@@ -1227,6 +1275,76 @@ ApplicationWindow {
 
         }
 
+        }
+
+        Rectangle {
+            id: workOverlay
+            anchors.fill: parent
+            radius: root.frameRadius
+            color: Qt.rgba(245 / 255, 245 / 255, 247 / 255, 0.56)
+            opacity: root.isWorking && !root.isBooting ? 1 : 0
+            visible: opacity > 0.01
+            z: 95
+            Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: 340
+                height: 166
+                radius: 18
+                color: "#FFFFFF"
+                border.color: "#E5E5EA"
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 24
+                    spacing: 14
+
+                    BusyIndicator {
+                        Layout.alignment: Qt.AlignHCenter
+                        running: workOverlay.visible
+                        implicitWidth: 40
+                        implicitHeight: 40
+                    }
+
+                    AppText {
+                        text: root.workText
+                        Layout.alignment: Qt.AlignHCenter
+                        font.pixelSize: 16
+                        font.weight: Font.Bold
+                    }
+
+                    ProgressBar {
+                        id: workProgress
+                        Layout.fillWidth: true
+                        indeterminate: true
+                        background: Rectangle {
+                            implicitHeight: 7
+                            radius: 4
+                            color: "#E5E5EA"
+                        }
+                        contentItem: Item {
+                            id: workProgressContent
+                            property real stripeX: -width * 0.36
+                            implicitHeight: 7
+                            Rectangle {
+                                width: parent.width * 0.36
+                                height: parent.height
+                                radius: 4
+                                color: root.macBlue
+                                x: parent.stripeX
+                            }
+                            NumberAnimation on stripeX {
+                                from: -workProgressContent.width * 0.36
+                                to: workProgressContent.width
+                                duration: 880
+                                loops: Animation.Infinite
+                                running: workOverlay.visible
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle {

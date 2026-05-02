@@ -193,6 +193,7 @@ class CalibratorBackend(QObject):
         self.results = []
         self.preview_camera = ""
         self.camera_status: Dict[str, dict] = {}
+        self.logged_camera_info_topics: set[str] = set()
         self.image_revision = 0
         self.preview_frame_key: object = None
         self.preview_fps_started = time.monotonic()
@@ -390,6 +391,7 @@ class CalibratorBackend(QObject):
                 self.ros_reader.shutdown()
             self.ros_reader = RosTopicReader()
             self.camera_status = {}
+            self.logged_camera_info_topics.clear()
             self._reset_preview_fps()
             for name, payload in self.cfg.get("cameras", {}).items():
                 self.ros_reader.connect_camera(
@@ -408,7 +410,7 @@ class CalibratorBackend(QObject):
             self.previewStatusChanged.emit("ROS 已连接，等待图像帧")
             self.cameraStatusChanged.emit(self.cameraStatusJson())
         except Exception as exc:
-            self.logChanged.emit(f"ROS 连接失败: {exc}")
+            self.logChanged.emit(f"ROS 连接失败: {self._format_exception(exc)}")
             self.previewStatusChanged.emit("ROS 连接失败")
 
     @Slot(str)
@@ -444,6 +446,33 @@ class CalibratorBackend(QObject):
         self.preview_fps_started = now
         self.preview_fps_frames = 0
 
+    def _log_camera_info_once(self, name: str, cache) -> None:
+        """Log camera intrinsics once after camera_info arrives."""
+        info = cache.last_camera_info
+        if not info or cache.camera_info_topic in self.logged_camera_info_topics:
+            return
+        self.logged_camera_info_topics.add(cache.camera_info_topic)
+        k = ", ".join(f"{float(value):.6g}" for value in info.get("K", []))
+        d = ", ".join(f"{float(value):.6g}" for value in info.get("D", []))
+        self.logChanged.emit(
+            "收到相机内参: "
+            f"{name} topic={cache.camera_info_topic}, "
+            f"size={info.get('width')}x{info.get('height')}, "
+            f"frame_id={info.get('frame_id')}, "
+            f"distortion_model={info.get('distortion_model')}, "
+            f"K=[{k}], D=[{d}]"
+        )
+
+    def _format_exception(self, exc: Exception) -> str:
+        """Make common runtime failures actionable in the GUI log."""
+        message = str(exc)
+        if "libgobject-2.0.so.0" in message and "undefined symbol" in message:
+            return (
+                "OpenCV 与 Qt/GLib 动态库冲突，检测模块无法加载 cv2: "
+                f"{message}"
+            )
+        return message
+
     @Slot(result=str)
     def cameraStatusJson(self) -> str:
         """返回多相机同步状态表 JSON
@@ -469,6 +498,7 @@ class CalibratorBackend(QObject):
             return
         changed = False
         for name, cache in self.ros_reader.cameras.items():
+            self._log_camera_info_once(name, cache)
             next_status = {
                 "image": "live" if cache.last_cv_image is not None else "等待",
                 "cameraInfo": "ok" if cache.last_camera_info else "等待",
@@ -666,7 +696,7 @@ class CalibratorBackend(QObject):
                 f"{name} 检测: ok={obs.ok}, corners={obs.corners_count}, reproj={obs.reprojection_error_px}"
             )
         except Exception as exc:
-            self.logChanged.emit(f"检测失败: {exc}")
+            self.logChanged.emit(f"检测失败: {self._format_exception(exc)}")
 
     @Slot(str, result=str)
     def refreshTf(self, raw_state: str) -> str:
@@ -691,8 +721,9 @@ class CalibratorBackend(QObject):
             self.logChanged.emit("TF 查询成功")
             return text
         except Exception as exc:
-            self.logChanged.emit(f"TF 查询失败: {exc}")
-            return str(exc)
+            formatted = self._format_exception(exc)
+            self.logChanged.emit(f"TF 查询失败: {formatted}")
+            return formatted
 
     @Slot(str, result=int)
     def captureSample(self, raw_state: str) -> int:
@@ -752,7 +783,7 @@ class CalibratorBackend(QObject):
             self.logChanged.emit(f"样本 {sample_dir.name} 已保存: {ok_summary}")
             return sample_id + 1
         except Exception as exc:
-            self.logChanged.emit(f"采样失败: {exc}")
+            self.logChanged.emit(f"采样失败: {self._format_exception(exc)}")
             return int(_loads(raw_state).get("sampleId", 1))
 
     def _parse_T_tool_board(self, state: dict):
@@ -812,8 +843,9 @@ class CalibratorBackend(QObject):
             self.logChanged.emit(f"标定完成: {task.name}, 输出 {out}")
             return json.dumps(payload, ensure_ascii=False, indent=2)
         except Exception as exc:
-            self.logChanged.emit(f"标定失败: {exc}")
-            return json.dumps({"error": str(exc)}, ensure_ascii=False, indent=2)
+            formatted = self._format_exception(exc)
+            self.logChanged.emit(f"标定失败: {formatted}")
+            return json.dumps({"error": formatted}, ensure_ascii=False, indent=2)
 
     @Slot(str)
     def exportTf(self, raw_state: str) -> None:
@@ -844,7 +876,7 @@ class CalibratorBackend(QObject):
             )
             self.logChanged.emit(f"TF bundle 已导出: {out}, transforms={len(results)}")
         except Exception as exc:
-            self.logChanged.emit(f"TF 导出失败: {exc}")
+            self.logChanged.emit(f"TF 导出失败: {self._format_exception(exc)}")
 
 
 def main() -> None:
