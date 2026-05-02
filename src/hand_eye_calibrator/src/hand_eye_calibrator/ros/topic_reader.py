@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Dict
 
 import numpy as np
@@ -8,6 +9,9 @@ from hand_eye_calibrator.ros.camera_cache import CameraCache
 
 
 class RosTopicReader:
+    IMAGE_BUFF_SIZE = 8 * 1024 * 1024
+    BACKGROUND_CONVERT_PERIOD_SEC = 0.5
+
     def __init__(self):
         """初始化对象并保存运行所需的状态
 
@@ -51,6 +55,8 @@ class RosTopicReader:
             self.Image,
             lambda msg, n=name: self._on_image(n, msg),
             queue_size=1,
+            buff_size=self.IMAGE_BUFF_SIZE,
+            tcp_nodelay=True,
         )
         cache.info_sub = self.rospy.Subscriber(
             camera_info_topic,
@@ -60,6 +66,13 @@ class RosTopicReader:
         )
         self.cameras[name] = cache
         return cache
+
+    def set_preview_camera(self, name: str) -> None:
+        """Mark the camera that should be converted at full preview rate."""
+        for camera_name, cache in self.cameras.items():
+            cache.needs_preview = camera_name == name
+            if cache.needs_preview:
+                cache.last_preview_convert_sec = None
 
     def _stamp_sec(self, msg) -> float:
         """将 ROS 消息时间戳转换为秒
@@ -88,9 +101,39 @@ class RosTopicReader:
         cache = self.cameras.get(name)
         if cache is None:
             return
+        receive_sec = self.rospy.Time.now().to_sec()
+        convert_started = time.monotonic()
+        stamp_sec = self._stamp_sec(msg)
         cache.last_image_msg = msg
-        cache.last_stamp_sec = self._stamp_sec(msg)
-        cache.last_cv_image = self._image_msg_to_bgr(msg)
+        cache.last_stamp_sec = stamp_sec
+        cache.last_receive_sec = receive_sec
+        should_convert = cache.needs_preview
+        if not should_convert:
+            last_convert = cache.last_preview_convert_sec
+            should_convert = (
+                last_convert is None
+                or convert_started - last_convert >= self.BACKGROUND_CONVERT_PERIOD_SEC
+            )
+        if should_convert:
+            cache.last_cv_image = self._image_msg_to_bgr(msg)
+            cache.last_preview_convert_sec = convert_started
+            cache.last_convert_ms = (time.monotonic() - convert_started) * 1000.0
+        cache.last_input_latency_ms = max(0.0, (receive_sec - stamp_sec) * 1000.0)
+        self._mark_input_frame(cache)
+
+    def _mark_input_frame(self, cache: CameraCache) -> None:
+        """Update FPS from frames received and converted by the ROS subscriber."""
+        now = time.monotonic()
+        if cache.input_fps_started is None:
+            cache.input_fps_started = now
+            cache.input_fps_frames = 0
+        cache.input_fps_frames += 1
+        elapsed = now - cache.input_fps_started
+        if elapsed < 1.0:
+            return
+        cache.input_fps = cache.input_fps_frames / elapsed
+        cache.input_fps_started = now
+        cache.input_fps_frames = 0
 
     def _image_msg_to_bgr(self, msg) -> np.ndarray:
         """Convert common ROS Image encodings to a BGR uint8 image.

@@ -205,7 +205,7 @@ class CalibratorBackend(QObject):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         if QCoreApplication.instance() is not None:
-            self.timer.start(90)
+            self.timer.start(33)
 
     @Slot(result=str)
     def initialState(self) -> str:
@@ -410,6 +410,7 @@ class CalibratorBackend(QObject):
                     "frameId": payload.get("frame_id", ""),
                     "stamp": "",
                 }
+            self.ros_reader.set_preview_camera(self.preview_camera)
             self.logChanged.emit("ROS 图像与 camera_info 话题已订阅")
             self.previewStatusChanged.emit("ROS 已连接，等待图像帧")
             self.cameraStatusChanged.emit(self.cameraStatusJson())
@@ -428,6 +429,8 @@ class CalibratorBackend(QObject):
             None: 无返回值
         """
         self.preview_camera = name or self.preview_camera
+        if self.ros_reader is not None:
+            self.ros_reader.set_preview_camera(self.preview_camera)
         self._reset_preview_fps()
         self._tick()
 
@@ -436,7 +439,7 @@ class CalibratorBackend(QObject):
         self.preview_frame_key = None
         self.preview_fps_started = time.monotonic()
         self.preview_fps_frames = 0
-        self.previewFpsChanged.emit("-- FPS")
+        self.previewFpsChanged.emit("显示 -- FPS / 输入 -- FPS / 延迟：-- ms")
 
     def _mark_preview_frame(self) -> None:
         """Update FPS from frames that are actually pushed to QML."""
@@ -446,7 +449,19 @@ class CalibratorBackend(QObject):
         if elapsed < 1.0:
             return
         fps = self.preview_fps_frames / elapsed
-        self.previewFpsChanged.emit(f"{fps:.1f} FPS")
+        input_fps = "--"
+        latency_ms = "--"
+        if self.ros_reader is not None:
+            cache = self.ros_reader.cameras.get(self.preview_camera)
+            if cache is not None and cache.input_fps is not None:
+                input_fps = f"{cache.input_fps:.1f}"
+            if cache is not None:
+                now_sec = self.ros_reader.rospy.Time.now().to_sec()
+                if cache.last_receive_sec is not None:
+                    latency_ms = f"{max(0.0, (now_sec - cache.last_receive_sec) * 1000.0):.0f}"
+        self.previewFpsChanged.emit(
+            f"显示 {fps:.1f} FPS / 输入 {input_fps} FPS / 延迟：{latency_ms} ms"
+        )
         self.preview_fps_started = now
         self.preview_fps_frames = 0
 
@@ -594,6 +609,13 @@ class CalibratorBackend(QObject):
         changed = False
         for name, cache in self.ros_reader.cameras.items():
             self._log_camera_info_once(name, cache)
+            display_latency_ms = None
+            gui_latency_ms = None
+            if cache.last_stamp_sec is not None:
+                now_sec = self.ros_reader.rospy.Time.now().to_sec()
+                display_latency_ms = max(0.0, (now_sec - cache.last_stamp_sec) * 1000.0)
+                if cache.last_receive_sec is not None:
+                    gui_latency_ms = max(0.0, (now_sec - cache.last_receive_sec) * 1000.0)
             next_status = {
                 "image": "live" if cache.last_cv_image is not None else "等待",
                 "cameraInfo": "ok" if cache.last_camera_info else "等待",
@@ -602,6 +624,31 @@ class CalibratorBackend(QObject):
                     ""
                     if cache.last_stamp_sec is None
                     else f"{cache.last_stamp_sec:.3f}"
+                ),
+                "inputFps": (
+                    ""
+                    if cache.input_fps is None
+                    else f"{cache.input_fps:.1f}"
+                ),
+                "inputLatencyMs": (
+                    ""
+                    if cache.last_input_latency_ms is None
+                    else f"{cache.last_input_latency_ms:.0f}"
+                ),
+                "displayLatencyMs": (
+                    ""
+                    if display_latency_ms is None
+                    else f"{display_latency_ms:.0f}"
+                ),
+                "guiLatencyMs": (
+                    ""
+                    if gui_latency_ms is None
+                    else f"{gui_latency_ms:.0f}"
+                ),
+                "convertMs": (
+                    ""
+                    if cache.last_convert_ms is None
+                    else f"{cache.last_convert_ms:.1f}"
                 ),
             }
             if self.camera_status.get(name) != next_status:

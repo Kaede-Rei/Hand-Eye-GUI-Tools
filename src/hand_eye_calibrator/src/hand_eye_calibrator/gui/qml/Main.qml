@@ -37,7 +37,7 @@ ApplicationWindow {
     property string previewCamera: ""
     property string previewSource: "image://camera/preview?rev=0"
     property string previewStatus: "等待相机画面"
-    property string previewFps: "-- FPS"
+    property string previewFps: "显示 -- FPS / 输入 -- FPS / 延迟：-- ms"
     property string tfText: "未查询"
     property string resultText: ""
     property string logs: ""
@@ -939,6 +939,8 @@ ApplicationWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                     anchors.right: parent.right
                                     anchors.rightMargin: 16
+                                    width: 430
+                                    horizontalAlignment: Text.AlignRight
                                     text: root.previewFps
                                     color: "#FFFFFF"
                                     font.pixelSize: 13
