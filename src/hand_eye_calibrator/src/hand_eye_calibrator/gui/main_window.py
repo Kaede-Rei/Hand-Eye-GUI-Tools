@@ -193,6 +193,7 @@ class CalibratorBackend(QObject):
         self.preview_camera = ""
         self.camera_status: Dict[str, dict] = {}
         self.image_revision = 0
+        self.preview_stamp_sec: Optional[float] = None
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         if QCoreApplication.instance() is not None:
@@ -386,6 +387,7 @@ class CalibratorBackend(QObject):
                 self.ros_reader.shutdown()
             self.ros_reader = RosTopicReader()
             self.camera_status = {}
+            self.preview_stamp_sec = None
             for name, payload in self.cfg.get("cameras", {}).items():
                 self.ros_reader.connect_camera(
                     name,
@@ -417,6 +419,7 @@ class CalibratorBackend(QObject):
             None: 无返回值
         """
         self.preview_camera = name or self.preview_camera
+        self.preview_stamp_sec = None
         self._tick()
 
     @Slot(result=str)
@@ -465,7 +468,13 @@ class CalibratorBackend(QObject):
         if cache.last_cv_image is None:
             self.previewStatusChanged.emit(f"{self.preview_camera}: 等待图像")
             return
+        if (
+            self.preview_stamp_sec is not None
+            and cache.last_stamp_sec == self.preview_stamp_sec
+        ):
+            return
         self.image_provider.set_bgr(cache.last_cv_image)
+        self.preview_stamp_sec = cache.last_stamp_sec
         self.image_revision += 1
         self.imageChanged.emit(f"image://camera/preview?rev={self.image_revision}")
         self.previewStatusChanged.emit(f"{self.preview_camera}: live")

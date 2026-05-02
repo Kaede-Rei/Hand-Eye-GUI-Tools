@@ -96,10 +96,7 @@ ApplicationWindow {
         target: backend
         function onLogChanged(message) { appendLog(message) }
         function onStateChanged(rawState) { loadState(JSON.parse(rawState)) }
-        function onImageChanged(url) {
-            previewSource = ""
-            previewSource = url
-        }
+        function onImageChanged(url) { previewSource = url }
         function onPreviewStatusChanged(message) { previewStatus = message }
         function onCameraStatusChanged(rawStatus) { cameraStatuses = JSON.parse(rawStatus) }
     }
@@ -887,9 +884,8 @@ ApplicationWindow {
                                 source: root.previewSource
                                 fillMode: Image.PreserveAspectFit
                                 cache: false
-                                asynchronous: true
-                                opacity: status === Image.Ready ? 1 : 0.45
-                                Behavior on opacity { NumberAnimation { duration: 160 } }
+                                asynchronous: false
+                                opacity: 1
                             }
                             Rectangle {
                                 anchors.left: parent.left
