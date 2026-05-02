@@ -1,5 +1,6 @@
 build/
 devel/
+.VSCodeCounter/
 __pycache__/
 *.py[cod]
 *.pyo
