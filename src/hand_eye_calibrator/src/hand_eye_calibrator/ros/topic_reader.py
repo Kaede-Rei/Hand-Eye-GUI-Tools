@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict
 
+import numpy as np
+
 from hand_eye_calibrator.ros.camera_cache import CameraCache
 
 
@@ -18,13 +20,11 @@ class RosTopicReader:
         try:
             import rospy
             from sensor_msgs.msg import Image, CameraInfo
-            from cv_bridge import CvBridge
         except Exception as exc:
             raise RuntimeError(f"ROS image dependencies are unavailable: {exc}")
         self.rospy = rospy
         self.Image = Image
         self.CameraInfo = CameraInfo
-        self.bridge = CvBridge()
         self.cameras: Dict[str, CameraCache] = {}
         if not rospy.core.is_initialized():
             rospy.init_node(
@@ -90,7 +90,79 @@ class RosTopicReader:
             return
         cache.last_image_msg = msg
         cache.last_stamp_sec = self._stamp_sec(msg)
-        cache.last_cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        cache.last_cv_image = self._image_msg_to_bgr(msg)
+
+    def _image_msg_to_bgr(self, msg) -> np.ndarray:
+        """Convert common ROS Image encodings to a BGR uint8 image.
+
+        This intentionally avoids cv_bridge. In the portable micromamba Noetic
+        environment cv_bridge imports cv2, which can load an incompatible
+        libgobject before the GUI has a chance to subscribe to topics.
+        """
+        encoding = (msg.encoding or "").lower()
+        channels_by_encoding = {
+            "bgr8": (np.uint8, 3),
+            "rgb8": (np.uint8, 3),
+            "bgra8": (np.uint8, 4),
+            "rgba8": (np.uint8, 4),
+            "mono8": (np.uint8, 1),
+            "8uc1": (np.uint8, 1),
+            "mono16": (np.uint16, 1),
+            "16uc1": (np.uint16, 1),
+            "32fc1": (np.float32, 1),
+        }
+        if encoding not in channels_by_encoding:
+            raise RuntimeError(f"Unsupported image encoding: {msg.encoding}")
+
+        dtype, channels = channels_by_encoding[encoding]
+        array = np.frombuffer(msg.data, dtype=dtype)
+        if msg.is_bigendian and array.dtype.byteorder != ">":
+            array = array.byteswap().newbyteorder()
+
+        expected_step = int(msg.width) * channels * np.dtype(dtype).itemsize
+        if int(msg.step) < expected_step:
+            raise RuntimeError(
+                f"Invalid image step {msg.step} for {msg.width}x{msg.height} {msg.encoding}"
+            )
+
+        row_items = int(msg.step) // np.dtype(dtype).itemsize
+        image = array.reshape((int(msg.height), row_items))
+        image = image[:, : int(msg.width) * channels]
+        if channels > 1:
+            image = image.reshape((int(msg.height), int(msg.width), channels))
+
+        if encoding == "bgr8":
+            return np.ascontiguousarray(image)
+        if encoding == "rgb8":
+            return np.ascontiguousarray(image[:, :, ::-1])
+        if encoding == "bgra8":
+            return np.ascontiguousarray(image[:, :, :3])
+        if encoding == "rgba8":
+            return np.ascontiguousarray(image[:, :, [2, 1, 0]])
+
+        mono = self._mono_to_uint8(image)
+        return np.ascontiguousarray(np.repeat(mono[:, :, None], 3, axis=2))
+
+    def _mono_to_uint8(self, image: np.ndarray) -> np.ndarray:
+        """Scale mono/depth images to uint8 for preview."""
+        if image.dtype == np.uint8:
+            return image
+        if np.issubdtype(image.dtype, np.floating):
+            finite = image[np.isfinite(image)]
+        else:
+            finite = image
+        if finite.size == 0:
+            return np.zeros(image.shape, dtype=np.uint8)
+        low = float(np.nanmin(finite))
+        high = float(np.nanmax(finite))
+        if high <= low:
+            return np.zeros(image.shape, dtype=np.uint8)
+        scaled = (image.astype(np.float32) - low) * (255.0 / (high - low))
+        return (
+            np.nan_to_num(scaled, nan=0.0, posinf=255.0, neginf=0.0)
+            .clip(0, 255)
+            .astype(np.uint8)
+        )
 
     def _on_info(self, name: str, msg) -> None:
         """处理 camera_info 消息并更新相机缓存
