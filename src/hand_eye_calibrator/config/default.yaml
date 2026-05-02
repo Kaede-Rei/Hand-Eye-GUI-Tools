@@ -5,34 +5,34 @@ project:
 
 robot:
   base_frame: base_link
-  tool_frame: link_tcp
+  tool_frame: link6
   tf_timeout_sec: 0.3
 
 cameras:
-  ee_camera:
-    image_topic: /ee_camera/color/image_raw
-    camera_info_topic: /ee_camera/color/camera_info
-    frame_id: ee_camera_color_optical_frame
+  wrist:
+    image_topic: /piper/camera/wrist/color/image_raw
+    camera_info_topic: /piper/camera/wrist/color/camera_info
+    frame_id: wrist_color_optical_frame
     role: eye_in_hand
     fx: 600
     fy: 600
     cx: 320
     cy: 240
     dist: "0,0,0,0,0"
-  fixed_camera:
-    image_topic: /fixed_camera/color/image_raw
-    camera_info_topic: /fixed_camera/color/camera_info
-    frame_id: fixed_camera_color_optical_frame
+  mid:
+    image_topic: /piper/camera/mid/color/image_raw
+    camera_info_topic: /piper/camera/mid/color/camera_info
+    frame_id: mid_color_optical_frame
     role: eye_to_hand
     fx: 600
     fy: 600
     cx: 320
     cy: 240
     dist: "0,0,0,0,0"
-  aux_camera:
-    image_topic: /aux_camera/color/image_raw
-    camera_info_topic: /aux_camera/color/camera_info
-    frame_id: aux_camera_color_optical_frame
+  far:
+    image_topic: /piper/camera/far/color/image_raw
+    camera_info_topic: /piper/camera/far/color/camera_info
+    frame_id: far_color_optical_frame
     role: auxiliary
     fx: 600
     fy: 600
@@ -51,17 +51,17 @@ board:
 calibration_tasks:
   - name: ee_eye_in_hand
     type: eye_in_hand
-    camera: ee_camera
-    output_parent: link_tcp
-    output_child: ee_camera_color_optical_frame
+    camera: wrist
+    output_parent: link6
+    output_child: wrist_color_optical_frame
   - name: fixed_eye_to_hand
     type: eye_to_hand
-    camera: fixed_camera
+    camera: mid
     output_parent: base_link
-    output_child: fixed_camera_color_optical_frame
+    output_child: mid_color_optical_frame
   - name: aux_to_fixed
     type: camera_to_camera
-    reference_camera: fixed_camera
-    target_camera: aux_camera
-    output_parent: fixed_camera_color_optical_frame
-    output_child: aux_camera_color_optical_frame
+    reference_camera: mid
+    target_camera: far
+    output_parent: mid_color_optical_frame
+    output_child: far_color_optical_frame

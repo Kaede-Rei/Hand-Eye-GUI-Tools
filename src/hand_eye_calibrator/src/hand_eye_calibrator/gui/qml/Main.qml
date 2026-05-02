@@ -37,6 +37,7 @@ ApplicationWindow {
     property string previewCamera: ""
     property string previewSource: "image://camera/preview?rev=0"
     property string previewStatus: "等待相机画面"
+    property string previewFps: "-- FPS"
     property string tfText: "未查询"
     property string resultText: ""
     property string logs: ""
@@ -98,6 +99,7 @@ ApplicationWindow {
         function onStateChanged(rawState) { loadState(JSON.parse(rawState)) }
         function onImageChanged(url) { previewSource = url }
         function onPreviewStatusChanged(message) { previewStatus = message }
+        function onPreviewFpsChanged(message) { previewFps = message }
         function onCameraStatusChanged(rawStatus) { cameraStatuses = JSON.parse(rawStatus) }
     }
 
@@ -897,7 +899,20 @@ ApplicationWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                     anchors.left: parent.left
                                     anchors.leftMargin: 16
+                                    anchors.right: fpsLabel.left
+                                    anchors.rightMargin: 12
+                                    elide: Text.ElideRight
                                     text: root.previewStatus
+                                    color: "#FFFFFF"
+                                    font.pixelSize: 13
+                                    font.weight: Font.DemiBold
+                                }
+                                AppText {
+                                    id: fpsLabel
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 16
+                                    text: root.previewFps
                                     color: "#FFFFFF"
                                     font.pixelSize: 13
                                     font.weight: Font.DemiBold

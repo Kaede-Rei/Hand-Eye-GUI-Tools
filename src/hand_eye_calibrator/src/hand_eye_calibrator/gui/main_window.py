@@ -172,6 +172,7 @@ class CalibratorBackend(QObject):
     stateChanged = Signal(str)
     imageChanged = Signal(str)
     previewStatusChanged = Signal(str)
+    previewFpsChanged = Signal(str)
     cameraStatusChanged = Signal(str)
 
     def __init__(self, image_provider: CameraImageProvider):
@@ -193,7 +194,9 @@ class CalibratorBackend(QObject):
         self.preview_camera = ""
         self.camera_status: Dict[str, dict] = {}
         self.image_revision = 0
-        self.preview_stamp_sec: Optional[float] = None
+        self.preview_frame_key: object = None
+        self.preview_fps_started = time.monotonic()
+        self.preview_fps_frames = 0
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         if QCoreApplication.instance() is not None:
@@ -387,7 +390,7 @@ class CalibratorBackend(QObject):
                 self.ros_reader.shutdown()
             self.ros_reader = RosTopicReader()
             self.camera_status = {}
-            self.preview_stamp_sec = None
+            self._reset_preview_fps()
             for name, payload in self.cfg.get("cameras", {}).items():
                 self.ros_reader.connect_camera(
                     name,
@@ -419,8 +422,27 @@ class CalibratorBackend(QObject):
             None: 无返回值
         """
         self.preview_camera = name or self.preview_camera
-        self.preview_stamp_sec = None
+        self._reset_preview_fps()
         self._tick()
+
+    def _reset_preview_fps(self) -> None:
+        """Reset preview frame gating and FPS counters."""
+        self.preview_frame_key = None
+        self.preview_fps_started = time.monotonic()
+        self.preview_fps_frames = 0
+        self.previewFpsChanged.emit("-- FPS")
+
+    def _mark_preview_frame(self) -> None:
+        """Update FPS from frames that are actually pushed to QML."""
+        self.preview_fps_frames += 1
+        now = time.monotonic()
+        elapsed = now - self.preview_fps_started
+        if elapsed < 1.0:
+            return
+        fps = self.preview_fps_frames / elapsed
+        self.previewFpsChanged.emit(f"{fps:.1f} FPS")
+        self.preview_fps_started = now
+        self.preview_fps_frames = 0
 
     @Slot(result=str)
     def cameraStatusJson(self) -> str:
@@ -468,13 +490,16 @@ class CalibratorBackend(QObject):
         if cache.last_cv_image is None:
             self.previewStatusChanged.emit(f"{self.preview_camera}: 等待图像")
             return
-        if (
-            self.preview_stamp_sec is not None
-            and cache.last_stamp_sec == self.preview_stamp_sec
-        ):
+        frame_key = (
+            cache.last_stamp_sec
+            if cache.last_stamp_sec is not None
+            else id(cache.last_image_msg)
+        )
+        if self.preview_frame_key is not None and frame_key == self.preview_frame_key:
             return
         self.image_provider.set_bgr(cache.last_cv_image)
-        self.preview_stamp_sec = cache.last_stamp_sec
+        self.preview_frame_key = frame_key
+        self._mark_preview_frame()
         self.image_revision += 1
         self.imageChanged.emit(f"image://camera/preview?rev={self.image_revision}")
         self.previewStatusChanged.emit(f"{self.preview_camera}: live")
