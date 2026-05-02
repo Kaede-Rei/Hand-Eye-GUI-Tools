@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -15,6 +18,7 @@ from PySide6.QtQuick import QQuickImageProvider
 
 from hand_eye_calibrator.core.io import read_data, write_data
 from hand_eye_calibrator.core.transform import make_transform, quaternion_xyzw_to_matrix
+from hand_eye_calibrator.boards.base import BoardObservation
 from hand_eye_calibrator.dataset.loader import load_dataset_records
 from hand_eye_calibrator.dataset.schema import CalibrationTask
 from hand_eye_calibrator.report.exporter import (
@@ -467,11 +471,102 @@ class CalibratorBackend(QObject):
         """Make common runtime failures actionable in the GUI log."""
         message = str(exc)
         if "libgobject-2.0.so.0" in message and "undefined symbol" in message:
-            return (
-                "OpenCV 与 Qt/GLib 动态库冲突，检测模块无法加载 cv2: "
-                f"{message}"
-            )
+            return "OpenCV 与 Qt/GLib 动态库冲突，检测模块无法加载 cv2: " f"{message}"
         return message
+
+    def _detection_worker_env(self) -> dict:
+        """Build a child-process environment that does not inherit PySide Qt libs."""
+        env = os.environ.copy()
+        package_root = str(Path(__file__).resolve().parents[2])
+        old_pythonpath = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = package_root + (
+            os.pathsep + old_pythonpath if old_pythonpath else ""
+        )
+        ld_entries = [
+            entry
+            for entry in env.get("LD_LIBRARY_PATH", "").split(os.pathsep)
+            if entry and "PySide6/Qt/lib" not in entry
+        ]
+        if ld_entries:
+            env["LD_LIBRARY_PATH"] = os.pathsep.join(ld_entries)
+        else:
+            env.pop("LD_LIBRARY_PATH", None)
+        return env
+
+    def _observation_from_worker(self, output_path: Path) -> BoardObservation:
+        """Rebuild BoardObservation from a worker npz result."""
+        data = np.load(output_path, allow_pickle=False)
+        meta = json.loads(str(data["meta"]))
+
+        def array_or_none(name: str):
+            return data[name] if meta.get(name) else None
+
+        image_size = meta.get("image_size")
+        return BoardObservation(
+            ok=bool(meta.get("ok")),
+            board_type=meta.get("board_type", ""),
+            message=meta.get("message", ""),
+            corners_count=int(meta.get("corners_count") or 0),
+            reprojection_error_px=meta.get("reprojection_error_px"),
+            image_size=tuple(image_size) if image_size else None,
+            corners_2d=array_or_none("corners_2d"),
+            points_3d=array_or_none("points_3d"),
+            T_camera_board=array_or_none("T_camera_board"),
+            rvec=array_or_none("rvec"),
+            tvec=array_or_none("tvec"),
+            annotated_image=array_or_none("annotated_image"),
+        )
+
+    def _detect_board_in_subprocess(
+        self,
+        image_bgr: np.ndarray,
+        camera_matrix: np.ndarray,
+        dist_coeffs: np.ndarray,
+        board_config: dict,
+    ) -> BoardObservation:
+        """Run OpenCV board detection outside the Qt GUI process."""
+        input_file = tempfile.NamedTemporaryFile(
+            prefix="hand_eye_detect_in_", suffix=".npz", delete=False
+        )
+        input_path = Path(input_file.name)
+        input_file.close()
+        output_file = tempfile.NamedTemporaryFile(
+            prefix="hand_eye_detect_out_", suffix=".npz", delete=False
+        )
+        output_path = Path(output_file.name)
+        output_file.close()
+        try:
+            np.savez_compressed(
+                input_path,
+                image_bgr=image_bgr,
+                camera_matrix=camera_matrix,
+                dist_coeffs=dist_coeffs,
+                board_config=json.dumps(board_config),
+            )
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "hand_eye_calibrator.ros.board_detection_worker",
+                    str(input_path),
+                    str(output_path),
+                ],
+                env=self._detection_worker_env(),
+                text=True,
+                capture_output=True,
+                timeout=20,
+                check=False,
+            )
+            if proc.returncode != 0:
+                detail = (proc.stderr or proc.stdout or "").strip()
+                raise RuntimeError(detail or f"检测子进程退出: {proc.returncode}")
+            return self._observation_from_worker(output_path)
+        finally:
+            for path in (input_path, output_path):
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    pass
 
     @Slot(result=str)
     def cameraStatusJson(self) -> str:
@@ -663,14 +758,42 @@ class CalibratorBackend(QObject):
             raise RuntimeError(f"相机暂无图像: {name}")
         K = self._camera_matrix(state, name)
         D = self._dist_coeffs(state, name)
+        intrinsics_source = "界面备用内参"
         if cache.last_camera_info and cache.last_camera_info.get("K"):
             K = np.array(cache.last_camera_info["K"], dtype=np.float64).reshape(3, 3)
             D = np.array(cache.last_camera_info.get("D", D), dtype=np.float64)
-        from hand_eye_calibrator.boards import create_board_detector
+            intrinsics_source = f"camera_info({cache.camera_info_topic})"
+        obs = self._detect_board_in_subprocess(
+            cache.last_cv_image,
+            K,
+            D,
+            self._board_config(state),
+        )
+        return cache, obs, intrinsics_source
 
-        detector = create_board_detector(self._board_config(state))
-        obs = detector.detect(cache.last_cv_image, K, D)
-        return cache, obs
+    def _format_detection_log(
+        self, name: str, cache, obs, intrinsics_source: str
+    ) -> str:
+        """Build a human-readable board detection result."""
+        status = "成功" if obs.ok else "未检测到有效标定板"
+        parts = [
+            f"当前相机标定板检测 {name}: {status}",
+            f"相机={name}",
+            f"图像话题={cache.image_topic}",
+            f"标定板={obs.board_type}",
+            f"图像尺寸={obs.image_size or '未知'}",
+            f"内参来源={intrinsics_source}",
+            f"角点数={obs.corners_count}",
+        ]
+        if obs.reprojection_error_px is not None:
+            parts.append(f"重投影误差={float(obs.reprojection_error_px):.3f}px")
+        if obs.message:
+            parts.append(f"原因={obs.message}")
+        if not obs.ok:
+            parts.append(
+                "提示=请确认画面中完整可见标定板、板类型/尺寸/字典配置正确、焦距内参与相机一致"
+            )
+        return "；".join(parts)
 
     @Slot(str)
     def testDetection(self, raw_state: str) -> None:
@@ -685,7 +808,7 @@ class CalibratorBackend(QObject):
         try:
             state = _loads(raw_state)
             name = state.get("previewCamera", self.preview_camera)
-            _, obs = self._detect_for_camera(state, name)
+            cache, obs, intrinsics_source = self._detect_for_camera(state, name)
             if obs.annotated_image is not None:
                 self.image_provider.set_bgr(obs.annotated_image)
                 self.image_revision += 1
@@ -693,7 +816,7 @@ class CalibratorBackend(QObject):
                     f"image://camera/preview?rev={self.image_revision}"
                 )
             self.logChanged.emit(
-                f"{name} 检测: ok={obs.ok}, corners={obs.corners_count}, reproj={obs.reprojection_error_px}"
+                self._format_detection_log(name, cache, obs, intrinsics_source)
             )
         except Exception as exc:
             self.logChanged.emit(f"检测失败: {self._format_exception(exc)}")
@@ -743,7 +866,7 @@ class CalibratorBackend(QObject):
             camera_payloads: Dict[str, dict] = {}
             stamps = []
             for name in names:
-                cache, obs = self._detect_for_camera(state, name)
+                cache, obs, _ = self._detect_for_camera(state, name)
                 if cache.last_stamp_sec is not None:
                     stamps.append(cache.last_stamp_sec)
                 camera_payloads[name] = {

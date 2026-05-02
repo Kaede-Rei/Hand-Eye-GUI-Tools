@@ -968,7 +968,7 @@ ApplicationWindow {
                                     })
                                 }
                                 SecondaryButton {
-                                    text: "测试当前检测"
+                                    text: "检测当前相机标定板"
                                     Layout.fillWidth: true
                                     enabled: !root.isWorking
                                     onClicked: root.runWithBusy("正在检测标定板...", function() {

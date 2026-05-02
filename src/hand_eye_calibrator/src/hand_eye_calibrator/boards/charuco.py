@@ -42,13 +42,27 @@ class CharucoDetector:
         if dictionary_id is None:
             raise ValueError(f"unsupported ChArUco dictionary: {dict_name}")
         self.dictionary = cv2.aruco.getPredefinedDictionary(dictionary_id)
-        self.board = cv2.aruco.CharucoBoard_create(
-            self.squares_x,
-            self.squares_y,
-            self.square_length_m,
-            self.marker_length_m,
-            self.dictionary,
-        )
+        if hasattr(cv2.aruco, "CharucoBoard_create"):
+            self.board = cv2.aruco.CharucoBoard_create(
+                self.squares_x,
+                self.squares_y,
+                self.square_length_m,
+                self.marker_length_m,
+                self.dictionary,
+            )
+        else:
+            self.board = cv2.aruco.CharucoBoard(
+                (self.squares_x, self.squares_y),
+                self.square_length_m,
+                self.marker_length_m,
+                self.dictionary,
+            )
+
+    def _chessboard_corners(self) -> np.ndarray:
+        """Return ChArUco board corner coordinates across OpenCV API versions."""
+        if hasattr(self.board, "getChessboardCorners"):
+            return np.asarray(self.board.getChessboardCorners(), dtype=np.float64)
+        return np.asarray(self.board.chessboardCorners, dtype=np.float64)
 
     def detect(self, image_bgr, camera_matrix, dist_coeffs) -> BoardObservation:
         """在图像中检测标定板并估计相机到标定板的位姿
@@ -105,7 +119,7 @@ class CharucoDetector:
             )
         obj_points = []
         img_points = []
-        chessboard_corners = np.asarray(self.board.chessboardCorners, dtype=np.float64)
+        chessboard_corners = self._chessboard_corners()
         for idx, corner in zip(charuco_ids.reshape(-1), charuco_corners.reshape(-1, 2)):
             obj_points.append(chessboard_corners[int(idx)])
             img_points.append(corner)

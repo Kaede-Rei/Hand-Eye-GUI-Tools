@@ -4,11 +4,24 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
-import cv2
+import numpy as np
+from PIL import Image
 
 from hand_eye_calibrator.boards.base import BoardObservation
 from hand_eye_calibrator.core.io import ensure_dir, write_data
 from hand_eye_calibrator.core.transform import transform_to_dict
+
+
+def _write_bgr_png(path: Path, image) -> None:
+    """Write a BGR/gray numpy image without importing OpenCV in the GUI process."""
+    array = np.asarray(image)
+    if array.ndim == 3 and array.shape[2] >= 3:
+        array = array[:, :, :3][:, :, ::-1]
+    elif array.ndim != 2:
+        raise ValueError(f"unsupported image shape for PNG: {array.shape}")
+    if array.dtype != np.uint8:
+        array = np.clip(array, 0, 255).astype(np.uint8)
+    Image.fromarray(np.ascontiguousarray(array)).save(path)
 
 
 def next_sample_id(dataset_root: Path) -> int:
@@ -85,7 +98,7 @@ def write_sample(
         camera_dir = ensure_dir(sample_dir / camera_name)
         image = payload.get("image")
         if image is not None:
-            cv2.imwrite(str(camera_dir / "image.png"), image)
+            _write_bgr_png(camera_dir / "image.png", image)
         camera_info = payload.get("camera_info")
         if camera_info is not None:
             write_data(camera_dir / "camera_info.yaml", camera_info)
@@ -93,5 +106,5 @@ def write_sample(
         if obs is not None:
             write_data(camera_dir / "detection.yaml", obs.to_yaml_payload())
             if obs.annotated_image is not None:
-                cv2.imwrite(str(camera_dir / "annotated.png"), obs.annotated_image)
+                _write_bgr_png(camera_dir / "annotated.png", obs.annotated_image)
     return sample_dir
